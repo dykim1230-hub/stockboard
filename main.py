@@ -175,21 +175,17 @@ def get_chart(symbol: str = Query(..., description="Stock symbol")):
         return None
 
 
-@app.get("/api/news")
-def get_news(stock_name: str = Query(..., description="Stock name for Naver News search")):
-    """
-    Scrape Naver News for the given stock name. Returns 10 most recent articles.
-    """
+def _naver_news(query: str) -> list:
+    """네이버 뉴스 최신순 스크래핑"""
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept-Language": "ko-KR,ko;q=0.9",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         }
-        query = f"{stock_name} 주식"
         res = requests.get(
             "https://search.naver.com/search.naver",
-            params={"where": "news", "query": query, "sort": 1},  # sort=1: 최신순
+            params={"where": "news", "query": query, "sort": 1},
             headers=headers,
             timeout=10
         )
@@ -200,7 +196,6 @@ def get_news(stock_name: str = Query(..., description="Stock name for Naver News
         if not inf_list:
             return []
 
-        # Collect (title, url) pairs: every 2 consecutive external-link <a> tags belong to 1 article
         seen_urls = set()
         articles = []
 
@@ -211,13 +206,11 @@ def get_news(stock_name: str = Query(..., description="Stock name for Naver News
             and "naver.com" not in a["href"]
         ]
 
-        # Group in pairs: [title_a, summary_a, title_a, summary_a, ...]
         i = 0
         while i < len(all_a) - 1 and len(articles) < 10:
             title_a = all_a[i]
             summary_a = all_a[i + 1]
             url = title_a["href"]
-            # Same pair if they share the same URL
             if title_a["href"] == summary_a["href"] and url not in seen_urls:
                 title = title_a.get_text(strip=True)
                 summary = summary_a.get_text(strip=True)
@@ -225,7 +218,7 @@ def get_news(stock_name: str = Query(..., description="Stock name for Naver News
                     "title": title,
                     "summary": summary[:120] + ("..." if len(summary) > 120 else ""),
                     "url": url,
-                    "source": "",
+                    "source": "네이버 뉴스",
                     "time_published": ""
                 })
                 seen_urls.add(url)
@@ -233,7 +226,6 @@ def get_news(stock_name: str = Query(..., description="Stock name for Naver News
             else:
                 i += 1
 
-        # Fallback: if no pairs found, just collect unique external links as titles
         if not articles:
             for a in all_a:
                 url = a["href"]
@@ -242,16 +234,71 @@ def get_news(stock_name: str = Query(..., description="Stock name for Naver News
                         "title": a.get_text(strip=True),
                         "summary": "",
                         "url": url,
-                        "source": "",
+                        "source": "네이버 뉴스",
                         "time_published": ""
                     })
                     seen_urls.add(url)
 
         return articles
-
     except Exception as e:
-        print(f"Naver News error for '{stock_name}': {e}")
+        print(f"Naver News error for '{query}': {e}")
         return []
+
+
+def _yfinance_news(symbol: str) -> list:
+    """yfinance로 해외 종목 뉴스 조회"""
+    try:
+        ticker = yf.Ticker(symbol)
+        raw_news = ticker.news or []
+        articles = []
+        for item in raw_news[:10]:
+            # yfinance 버전에 따라 구조가 다름
+            content = item.get("content", item)
+            title = content.get("title") or item.get("title", "")
+            url = (
+                content.get("canonicalUrl", {}).get("url")
+                or item.get("link")
+                or item.get("url", "")
+            )
+            publisher = (
+                content.get("provider", {}).get("displayName")
+                or item.get("publisher", "")
+            )
+            pub_time = content.get("pubDate") or item.get("providerPublishTime", "")
+            summary = content.get("summary") or item.get("summary", "")
+
+            if title and url:
+                articles.append({
+                    "title": title,
+                    "summary": summary[:120] + ("..." if len(summary) > 120 else "") if summary else "",
+                    "url": url,
+                    "source": publisher,
+                    "time_published": str(pub_time)
+                })
+        return articles
+    except Exception as e:
+        print(f"yfinance news error for '{symbol}': {e}")
+        return []
+
+
+@app.get("/api/news")
+def get_news(
+    stock_name: str = Query(..., description="Stock name for display/search"),
+    symbol: str = Query(None, description="Stock symbol (required for international stocks)"),
+    is_korean: bool = Query(True, description="Korean stock flag")
+):
+    """
+    국내 종목: 네이버 뉴스 최신순 스크래핑
+    해외 종목: yfinance 뉴스 (종목명 자동 매핑)
+    """
+    if is_korean:
+        return _naver_news(f"{stock_name} 주식")
+    else:
+        if not symbol:
+            return []
+        # yfinance에서 회사 정식명 조회 후 함께 반환
+        articles = _yfinance_news(symbol)
+        return articles
 
 
 if __name__ == "__main__":

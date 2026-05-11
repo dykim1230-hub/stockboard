@@ -71,9 +71,14 @@ const fetchTimeSeries = async (symbol) => {
     }
 };
 
-const fetchNews = async (stockName) => {
+const fetchNews = async (stockName, symbol, isKorean) => {
     try {
-        const res = await fetch(`${BASE_URL}/news?stock_name=${encodeURIComponent(stockName)}`);
+        const params = new URLSearchParams({
+            stock_name: stockName,
+            is_korean: isKorean ? 'true' : 'false',
+        });
+        if (symbol) params.append('symbol', symbol);
+        const res = await fetch(`${BASE_URL}/news?${params.toString()}`);
         const data = await res.json();
         return data || [];
     } catch (e) {
@@ -176,10 +181,11 @@ const SearchModal = ({ isOpen, onClose, favorites, toggleFavorite }) => {
                                 const currency = item['3. currency'] || 'USD';
                                 const isChecked = favorites.some(f => f.symbol === symbol);
                                 
+                                const isKorean = item['4. is_korean'] === true;
                                 return (
-                                    <div key={symbol} className="search-result-item" onClick={() => toggleFavorite({symbol, name, currency})}>
-                                        <input 
-                                            type="checkbox" 
+                                    <div key={symbol} className="search-result-item" onClick={() => toggleFavorite({symbol, name, currency, isKorean})}>
+                                        <input
+                                            type="checkbox"
                                             className="custom-checkbox"
                                             checked={isChecked}
                                             readOnly
@@ -436,7 +442,8 @@ const NewsSection = ({ activeStock }) => {
         setNews([]);
         const loadNews = async () => {
             setLoading(true);
-            const data = await fetchNews(activeStock.name);
+            const isKorean = activeStock.isKorean !== false;
+            const data = await fetchNews(activeStock.name, activeStock.symbol, isKorean);
             setNews((data || []).slice(0, 10));
             setLoading(false);
         };
@@ -450,7 +457,9 @@ const NewsSection = ({ activeStock }) => {
             <h2 className="news-header">
                 <span className="material-symbols-outlined">newspaper</span>
                 {activeStock.name} 관련 최신 뉴스
-                <span style={{fontSize:'0.75rem', color:'var(--text-muted)', fontWeight:400, marginLeft:'0.5rem'}}>(네이버 뉴스)</span>
+                <span style={{fontSize:'0.75rem', color:'var(--text-muted)', fontWeight:400, marginLeft:'0.5rem'}}>
+                    {activeStock.isKorean !== false ? '(네이버 뉴스)' : '(Yahoo Finance)'}
+                </span>
             </h2>
             {loading ? (
                 <div className="spinner"></div>
@@ -466,6 +475,9 @@ const NewsSection = ({ activeStock }) => {
                                 {item.summary && (
                                     <div className="news-list-summary">{item.summary}</div>
                                 )}
+                                {item.source && (
+                                    <div style={{fontSize:'0.7rem', color:'var(--text-muted)', marginTop:'2px'}}>{item.source}</div>
+                                )}
                             </div>
                             <span className="material-symbols-outlined" style={{fontSize:'1.1rem', color:'var(--text-muted)', flexShrink:0}}>open_in_new</span>
                         </a>
@@ -478,7 +490,7 @@ const NewsSection = ({ activeStock }) => {
 
 const App = () => {
     const [favorites, setFavorites] = useState([
-        { symbol: 'AAPL', name: 'Apple Inc', currency: 'USD' }
+        { symbol: 'AAPL', name: 'Apple Inc', currency: 'USD', isKorean: false }
     ]);
     const [activeStock, setActiveStock] = useState(favorites[0]);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
