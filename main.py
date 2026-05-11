@@ -176,7 +176,11 @@ def get_chart(symbol: str = Query(..., description="Stock symbol")):
 
 
 def _naver_news(query: str) -> list:
-    """네이버 뉴스 최신순 스크래핑 - li.bx 아이템 직접 파싱"""
+    """네이버 뉴스 최신순 스크래핑"""
+    import re
+    from urllib.parse import urlparse
+    from collections import defaultdict
+
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -191,40 +195,77 @@ def _naver_news(query: str) -> list:
         res.encoding = "utf-8"
         soup = BeautifulSoup(res.text, "html.parser")
 
-        articles = []
-        seen_urls = set()
+        time_pattern = re.compile(r"\d+분 전|\d+시간 전|\d+일 전|방금 전|어제|\d{4}\.\d{2}\.\d{2}")
+        url_to_texts = defaultdict(list)
+        url_order = []
 
-        # 각 뉴스 아이템: li.bx
-        for item in soup.select("li.bx"):
+        # 기사 URL(경로 있는 외부 링크)별로 텍스트 수집
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            if not href.startswith("http"):
+                continue
+            if "naver.com" in href or "keep.naver" in href:
+                continue
+            parsed = urlparse(href)
+            if not parsed.path or parsed.path == "/":
+                continue
+            text = a.get_text(strip=True)
+            if not text:
+                continue
+            if href not in url_to_texts:
+                url_order.append(href)
+            url_to_texts[href].append(text)
+
+        articles = []
+        for href in url_order:
             if len(articles) >= 10:
                 break
-
-            title_el = item.select_one("a.news_tit")
-            if not title_el:
+            texts = url_to_texts[href]
+            if not texts:
                 continue
 
-            title = title_el.get_text(strip=True)
-            url = title_el.get("href", "")
-            if not url or url in seen_urls:
-                continue
+            # 가장 짧은 텍스트 = 제목, 가장 긴 텍스트 = 요약
+            title = min(texts, key=len)
+            summary = max(texts, key=len) if len(texts) > 1 else ""
+            if summary == title:
+                summary = ""
 
-            summary_el = item.select_one(".dsc_txt") or item.select_one(".dsc_txt_wrap")
-            summary = summary_el.get_text(strip=True) if summary_el else ""
-
-            source_el = item.select_one(".info_group a") or item.select_one(".press")
-            source = source_el.get_text(strip=True) if source_el else ""
-
-            time_el = item.select_one(".info_group span.is_blind") or item.select_one(".info_group .date")
-            time_published = time_el.get_text(strip=True) if time_el else ""
+            # 링크 주변 컨테이너에서 시간/언론사 추출
+            time_published = ""
+            source = ""
+            for a in soup.find_all("a", href=True):
+                if a["href"] != href:
+                    continue
+                container = a
+                for _ in range(8):
+                    container = container.parent
+                    if not container:
+                        break
+                    full_text = container.get_text(" ", strip=True)
+                    if not time_published:
+                        m = time_pattern.search(full_text)
+                        if m:
+                            time_published = m.group()
+                    if not source:
+                        for sa in container.find_all("a", href=True):
+                            sh = sa.get("href", "")
+                            if sh.startswith("http") and "naver.com" not in sh:
+                                sp = urlparse(sh)
+                                if not sp.path or sp.path == "/":
+                                    st = sa.get_text(strip=True)
+                                    if st:
+                                        source = st
+                    if time_published and source:
+                        break
+                break
 
             articles.append({
                 "title": title,
                 "summary": summary[:120] + ("..." if len(summary) > 120 else ""),
-                "url": url,
+                "url": href,
                 "source": source,
                 "time_published": time_published
             })
-            seen_urls.add(url)
 
         return articles
     except Exception as e:

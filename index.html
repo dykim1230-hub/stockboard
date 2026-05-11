@@ -475,9 +475,10 @@ const NewsSection = ({ activeStock }) => {
                                 {item.summary && (
                                     <div className="news-list-summary">{item.summary}</div>
                                 )}
-                                {item.source && (
-                                    <div style={{fontSize:'0.7rem', color:'var(--text-muted)', marginTop:'2px'}}>{item.source}</div>
-                                )}
+                                <div style={{fontSize:'0.7rem', color:'var(--text-muted)', marginTop:'3px', display:'flex', gap:'0.5rem'}}>
+                                    {item.source && <span>{item.source}</span>}
+                                    {item.time_published && <span>{item.time_published}</span>}
+                                </div>
                             </div>
                             <span className="material-symbols-outlined" style={{fontSize:'1.1rem', color:'var(--text-muted)', flexShrink:0}}>open_in_new</span>
                         </a>
