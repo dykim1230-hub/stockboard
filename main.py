@@ -176,12 +176,11 @@ def get_chart(symbol: str = Query(..., description="Stock symbol")):
 
 
 def _naver_news(query: str) -> list:
-    """네이버 뉴스 최신순 스크래핑"""
+    """네이버 뉴스 최신순 스크래핑 - li.bx 아이템 직접 파싱"""
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept-Language": "ko-KR,ko;q=0.9",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         }
         res = requests.get(
             "https://search.naver.com/search.naver",
@@ -192,52 +191,40 @@ def _naver_news(query: str) -> list:
         res.encoding = "utf-8"
         soup = BeautifulSoup(res.text, "html.parser")
 
-        inf_list = soup.select_one("ul._infinite_list")
-        if not inf_list:
-            return []
-
-        seen_urls = set()
         articles = []
+        seen_urls = set()
 
-        all_a = [
-            a for a in inf_list.find_all("a", href=True)
-            if a.get_text(strip=True) and len(a.get_text(strip=True)) > 10
-            and a["href"].startswith("http")
-            and "naver.com" not in a["href"]
-        ]
+        # 각 뉴스 아이템: li.bx
+        for item in soup.select("li.bx"):
+            if len(articles) >= 10:
+                break
 
-        i = 0
-        while i < len(all_a) - 1 and len(articles) < 10:
-            title_a = all_a[i]
-            summary_a = all_a[i + 1]
-            url = title_a["href"]
-            if title_a["href"] == summary_a["href"] and url not in seen_urls:
-                title = title_a.get_text(strip=True)
-                summary = summary_a.get_text(strip=True)
-                articles.append({
-                    "title": title,
-                    "summary": summary[:120] + ("..." if len(summary) > 120 else ""),
-                    "url": url,
-                    "source": "네이버 뉴스",
-                    "time_published": ""
-                })
-                seen_urls.add(url)
-                i += 2
-            else:
-                i += 1
+            title_el = item.select_one("a.news_tit")
+            if not title_el:
+                continue
 
-        if not articles:
-            for a in all_a:
-                url = a["href"]
-                if url not in seen_urls and len(articles) < 10:
-                    articles.append({
-                        "title": a.get_text(strip=True),
-                        "summary": "",
-                        "url": url,
-                        "source": "네이버 뉴스",
-                        "time_published": ""
-                    })
-                    seen_urls.add(url)
+            title = title_el.get_text(strip=True)
+            url = title_el.get("href", "")
+            if not url or url in seen_urls:
+                continue
+
+            summary_el = item.select_one(".dsc_txt") or item.select_one(".dsc_txt_wrap")
+            summary = summary_el.get_text(strip=True) if summary_el else ""
+
+            source_el = item.select_one(".info_group a") or item.select_one(".press")
+            source = source_el.get_text(strip=True) if source_el else ""
+
+            time_el = item.select_one(".info_group span.is_blind") or item.select_one(".info_group .date")
+            time_published = time_el.get_text(strip=True) if time_el else ""
+
+            articles.append({
+                "title": title,
+                "summary": summary[:120] + ("..." if len(summary) > 120 else ""),
+                "url": url,
+                "source": source,
+                "time_published": time_published
+            })
+            seen_urls.add(url)
 
         return articles
     except Exception as e:
@@ -245,39 +232,43 @@ def _naver_news(query: str) -> list:
         return []
 
 
-def _yfinance_news(symbol: str) -> list:
-    """yfinance로 해외 종목 뉴스 조회"""
+def _yahoo_rss_news(symbol: str) -> list:
+    """Yahoo Finance RSS 피드로 해외 종목 최신 뉴스 조회"""
+    import xml.etree.ElementTree as ET
     try:
-        ticker = yf.Ticker(symbol)
-        raw_news = ticker.news or []
+        rss_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        res = requests.get(rss_url, headers=headers, timeout=10)
+        res.raise_for_status()
+
+        root = ET.fromstring(res.content)
+        ns = {"media": "http://search.yahoo.com/mrss/"}
         articles = []
-        for item in raw_news[:10]:
-            # yfinance 버전에 따라 구조가 다름
-            content = item.get("content", item)
-            title = content.get("title") or item.get("title", "")
-            url = (
-                content.get("canonicalUrl", {}).get("url")
-                or item.get("link")
-                or item.get("url", "")
-            )
-            publisher = (
-                content.get("provider", {}).get("displayName")
-                or item.get("publisher", "")
-            )
-            pub_time = content.get("pubDate") or item.get("providerPublishTime", "")
-            summary = content.get("summary") or item.get("summary", "")
+
+        for item in root.findall(".//item")[:10]:
+            title = item.findtext("title", "").strip()
+            url = item.findtext("link", "").strip()
+            summary = item.findtext("description", "").strip()
+            pub_date = item.findtext("pubDate", "").strip()
+            source_el = item.find("source")
+            source = source_el.text.strip() if source_el is not None else "Yahoo Finance"
+
+            # HTML 태그 제거
+            if summary:
+                summary = BeautifulSoup(summary, "html.parser").get_text(strip=True)
 
             if title and url:
                 articles.append({
                     "title": title,
-                    "summary": summary[:120] + ("..." if len(summary) > 120 else "") if summary else "",
+                    "summary": summary[:120] + ("..." if len(summary) > 120 else ""),
                     "url": url,
-                    "source": publisher,
-                    "time_published": str(pub_time)
+                    "source": source,
+                    "time_published": pub_date
                 })
+
         return articles
     except Exception as e:
-        print(f"yfinance news error for '{symbol}': {e}")
+        print(f"Yahoo RSS news error for '{symbol}': {e}")
         return []
 
 
@@ -296,9 +287,7 @@ def get_news(
     else:
         if not symbol:
             return []
-        # yfinance에서 회사 정식명 조회 후 함께 반환
-        articles = _yfinance_news(symbol)
-        return articles
+        return _yahoo_rss_news(symbol)
 
 
 if __name__ == "__main__":
