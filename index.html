@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock & News Dashboard</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Material Symbols Outlined -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- React & ReactDOM (Development version for better errors) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel for JSX compilation in browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Application Script -->
+    <script type="text/babel">
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+// Configuration
+const BASE_URL = 'http://localhost:8000/api';
+
+// --- API Utilities ---
+const fetchSearch = async (query) => {
+    if (!query) return [];
+    try {
+        const res = await fetch(`${BASE_URL}/search?q=${query}`);
+        const data = await res.json();
+        return data || [];
+    } catch (e) {
+        console.error("Search API Error:", e);
+        return [];
+    }
+};
+
+const fetchQuote = async (symbol) => {
+    try {
+        const res = await fetch(`${BASE_URL}/quote?symbol=${symbol}`);
+        const data = await res.json();
+        return data || null;
+    } catch (e) {
+        console.error("Quote API Error:", e);
+        return null;
+    }
+};
+
+const fetchTimeSeries = async (symbol) => {
+    try {
+        const res = await fetch(`${BASE_URL}/chart?symbol=${symbol}`);
+        const data = await res.json();
+        return data || null;
+    } catch (e) {
+        console.error("Time Series API Error:", e);
+        return null;
+    }
+};
+
+const fetchNews = async (stockName) => {
+    try {
+        const res = await fetch(`${BASE_URL}/news?stock_name=${encodeURIComponent(stockName)}`);
+        const data = await res.json();
+        return data || [];
+    } catch (e) {
+        console.error("News API Error:", e);
+        return [];
+    }
+};
+
+// --- Formatting Helpers ---
+const formatPrice = (price, currency) => {
+    if (price === null || price === undefined) return '---';
+    if (currency === 'KRW') {
+        return Math.round(price).toLocaleString('ko-KR') + '원';
+    }
+    return '$' + parseFloat(price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+const formatChange = (change, currency) => {
+    if (change === null || change === undefined) return '---';
+    const prefix = change > 0 ? '+' : '';
+    if (currency === 'KRW') {
+        return prefix + Math.round(change).toLocaleString('ko-KR') + '원';
+    }
+    return prefix + '$' + Math.abs(parseFloat(change)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) * Math.sign(change > 0 ? 1 : -1);
+};
+
+const formatChartTick = (val, currency) => {
+    if (currency === 'KRW') {
+        return Math.round(val).toLocaleString('ko-KR');
+    }
+    return '$' + val.toFixed(2);
+};
+
+const formatTooltip = (val, currency) => {
+    if (currency === 'KRW') {
+        return Math.round(val).toLocaleString('ko-KR') + '원';
+    }
+    return '$' + val.toFixed(2);
+};
+
+// --- Components ---
+
+const SearchModal = ({ isOpen, onClose, favorites, toggleFavorite }) => {
+    const [query, setQuery] = useState('');
+    const [results, setResults] = useState([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!isOpen) {
+            setQuery('');
+            setResults([]);
+        }
+    }, [isOpen]);
+
+    useEffect(() => {
+        const timer = setTimeout(async () => {
+            if (query.trim().length > 0) {
+                setLoading(true);
+                const data = await fetchSearch(query);
+                setResults(data);
+                setLoading(false);
+            } else {
+                setResults([]);
+            }
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [query]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                    <h2 className="modal-title">종목 검색</h2>
+                    <button className="close-btn" onClick={onClose}>
+                        <span className="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <div className="modal-body">
+                    <div className="search-input-wrapper">
+                        <span className="material-symbols-outlined">search</span>
+                        <input 
+                            type="text" 
+                            className="search-input" 
+                            placeholder="종목명 또는 티커(Ticker) 검색..." 
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            autoFocus
+                        />
+                    </div>
+                    
+                    {loading ? (
+                        <div className="spinner"></div>
+                    ) : (
+                        <div className="search-results">
+                            {results.map((item) => {
+                                const symbol = item['1. symbol'];
+                                const name = item['2. name'];
+                                const currency = item['3. currency'] || 'USD';
+                                const isChecked = favorites.some(f => f.symbol === symbol);
+                                
+                                return (
+                                    <div key={symbol} className="search-result-item" onClick={() => toggleFavorite({symbol, name, currency})}>
+                                        <input 
+                                            type="checkbox" 
+                                            className="custom-checkbox"
+                                            checked={isChecked}
+                                            readOnly
+                                        />
+                                        <div className="search-result-info">
+                                            <div className="search-result-symbol">
+                                                {name}
+                                                <span style={{fontSize:'0.75rem', color:'var(--text-muted)', marginLeft:'0.5rem'}}>({symbol})</span>
+                                            </div>
+                                            <div className="search-result-name" style={{color: currency==='KRW' ? '#10b981' : '#3b82f6'}}>
+                                                {currency === 'KRW' ? '🇰🇷 국내' : '🌐 해외'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {!loading && query && results.length === 0 && (
+                                <div className="empty-state">검색 결과가 없습니다.</div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const FavoriteCard = ({ favorite, isActive, onClick, onToggle }) => {
+    const [quote, setQuote] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const loadQuote = async () => {
+            setLoading(true);
+            const data = await fetchQuote(favorite.symbol);
+            if (data && data['05. price'] !== undefined) {
+                setQuote(data);
+            }
+            setLoading(false);
+        };
+        loadQuote();
+    }, [favorite.symbol]);
+
+    const currency = quote ? (quote['11. currency'] || favorite.currency || 'USD') : (favorite.currency || 'USD');
+    const rawPrice = quote ? quote['05. price'] : null;
+    const rawChange = quote ? quote['09. change'] : 0;
+    const changePct = quote ? quote['10. change percent'] : 0;
+    const isPositive = rawChange > 0;
+    const isNegative = rawChange < 0;
+
+    return (
+        <div className={`glass-panel favorite-card ${isActive ? 'active' : ''}`} onClick={() => onClick(favorite)}>
+            <div className="card-header">
+                <div className="card-symbol" onClick={e => e.stopPropagation()}>
+                    <input 
+                        type="checkbox" 
+                        className="custom-checkbox"
+                        checked={true}
+                        onChange={() => onToggle(favorite)}
+                    />
+                    <div>
+                        <div style={{fontWeight: 600, fontSize: '1rem'}}>{favorite.name}</div>
+                        <div style={{fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px'}}>{favorite.symbol}</div>
+                    </div>
+                </div>
+            </div>
+            {loading ? (
+                <div style={{height: '48px', display:'flex', alignItems:'center'}}>
+                    <div className="spinner" style={{width:'20px', height:'20px', margin:0, borderWidth:'2px'}}></div>
+                </div>
+            ) : (
+                <>
+                    <div className="card-price" style={{fontSize: currency==='KRW' ? '1.2rem' : '1.5rem'}}>
+                        {formatPrice(rawPrice, currency)}
+                    </div>
+                    <div className={`card-change ${isPositive ? 'text-success' : isNegative ? 'text-danger' : 'text-neutral'}`}>
+                        <span className="material-symbols-outlined" style={{fontSize: '1rem'}}>
+                            {isPositive ? 'trending_up' : isNegative ? 'trending_down' : 'remove'}
+                        </span>
+                        {formatPrice(rawChange, currency)} ({(changePct >= 0 ? '+' : '') + parseFloat(changePct).toFixed(2)}%)
+                    </div>
+                </>
+            )}
+        </div>
+    );
+};
+
+const ChartSection = ({ activeStock }) => {
+    const chartRef = useRef(null);
+    const chartInstance = useRef(null);
+    const [timeframe, setTimeframe] = useState('1M');
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!activeStock) return;
+        
+        const loadData = async () => {
+            setLoading(true);
+            const tsData = await fetchTimeSeries(activeStock.symbol);
+            if (tsData) {
+                const entries = Object.entries(tsData)
+                    .map(([date, values]) => ({
+                        date,
+                        close: parseFloat(values['4. close'])
+                    }))
+                    .sort((a, b) => new Date(a.date) - new Date(b.date));
+                setData(entries);
+            } else {
+                setData([]);
+            }
+            setLoading(false);
+        };
+        
+        loadData();
+    }, [activeStock]);
+
+    useEffect(() => {
+        if (!data || !chartRef.current) return;
+
+        let filteredData = [...data];
+        const now = new Date(data[data.length - 1]?.date || Date.now()); 
+        
+        if (timeframe === '1W') {
+            const weekAgo = new Date(now);
+            weekAgo.setDate(weekAgo.getDate() - 7);
+            filteredData = data.filter(d => new Date(d.date) >= weekAgo);
+        } else if (timeframe === '1M') {
+            const monthAgo = new Date(now);
+            monthAgo.setMonth(monthAgo.getMonth() - 1);
+            filteredData = data.filter(d => new Date(d.date) >= monthAgo);
+        } else if (timeframe === '3M') {
+            const threeMonthsAgo = new Date(now);
+            threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+            filteredData = data.filter(d => new Date(d.date) >= threeMonthsAgo);
+        }
+
+        const labels = filteredData.map(d => d.date);
+        const values = filteredData.map(d => d.close);
+        
+        const isPositive = values[values.length - 1] >= values[0];
+        const lineColor = isPositive ? '#10b981' : '#ef4444';
+        const gradientColor = isPositive ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+
+        if (chartInstance.current) {
+            chartInstance.current.destroy();
+        }
+
+        const ctx = chartRef.current.getContext('2d');
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, gradientColor);
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+        chartInstance.current = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: `${activeStock.symbol} Price`,
+                    data: values,
+                    borderColor: lineColor,
+                    backgroundColor: gradient,
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHoverRadius: 6,
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    intersect: false,
+                    mode: 'index',
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                        titleColor: '#f8fafc',
+                        bodyColor: '#f8fafc',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1,
+                        padding: 10,
+                        displayColors: false,
+                        callbacks: {
+                            label: function(context) {
+                                const cur = activeStock?.currency || 'USD';
+                                return formatTooltip(context.parsed.y, cur);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false, drawBorder: false },
+                        ticks: { maxTicksLimit: 6, color: '#94a3b8' }
+                    },
+                    y: {
+                        grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
+                        ticks: { color: '#94a3b8', callback: (val) => formatChartTick(val, activeStock?.currency || 'USD') }
+                    }
+                }
+            }
+        });
+        
+    }, [data, timeframe]);
+
+    if (!activeStock) {
+        return (
+            <div className="glass-panel chart-section" style={{display:'flex', alignItems:'center', justifyContent:'center', height:'400px'}}>
+                <div className="empty-state">
+                    <span className="material-symbols-outlined">show_chart</span>
+                    <p>종목을 선택하면 차트가 표시됩니다.</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="glass-panel chart-section">
+            <div className="chart-header">
+                <div className="chart-title">{activeStock.name} ({activeStock.symbol})</div>
+                <div className="timeframe-selector">
+                    {['1W', '1M', '3M', '1Y'].map(tf => (
+                        <button 
+                            key={tf}
+                            className={`timeframe-btn ${timeframe === tf ? 'active' : ''}`}
+                            onClick={() => setTimeframe(tf)}
+                        >
+                            {tf}
+                        </button>
+                    ))}
+                </div>
+            </div>
+            {loading ? (
+                <div className="spinner"></div>
+            ) : (
+                <div className="chart-container">
+                    <canvas ref={chartRef}></canvas>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const NewsSection = ({ activeStock }) => {
+    const [news, setNews] = useState([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!activeStock) return;
+        setNews([]);
+        const loadNews = async () => {
+            setLoading(true);
+            const data = await fetchNews(activeStock.name);
+            setNews((data || []).slice(0, 10));
+            setLoading(false);
+        };
+        loadNews();
+    }, [activeStock]);
+
+    if (!activeStock) return null;
+
+    return (
+        <div className="news-section">
+            <h2 className="news-header">
+                <span className="material-symbols-outlined">newspaper</span>
+                {activeStock.name} 관련 최신 뉴스
+                <span style={{fontSize:'0.75rem', color:'var(--text-muted)', fontWeight:400, marginLeft:'0.5rem'}}>(네이버 뉴스)</span>
+            </h2>
+            {loading ? (
+                <div className="spinner"></div>
+            ) : news.length === 0 ? (
+                <div className="empty-state">관련 뉴스가 없습니다.</div>
+            ) : (
+                <div className="news-list">
+                    {news.map((item, idx) => (
+                        <a key={idx} href={item.url} target="_blank" rel="noopener noreferrer" className="news-list-item">
+                            <div className="news-list-num">{String(idx + 1).padStart(2, '0')}</div>
+                            <div className="news-list-content">
+                                <div className="news-list-title">{item.title}</div>
+                                {item.summary && (
+                                    <div className="news-list-summary">{item.summary}</div>
+                                )}
+                            </div>
+                            <span className="material-symbols-outlined" style={{fontSize:'1.1rem', color:'var(--text-muted)', flexShrink:0}}>open_in_new</span>
+                        </a>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const App = () => {
+    const [favorites, setFavorites] = useState([
+        { symbol: 'AAPL', name: 'Apple Inc', currency: 'USD' }
+    ]);
+    const [activeStock, setActiveStock] = useState(favorites[0]);
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+    const toggleFavorite = (stock) => {
+        setFavorites(prev => {
+            const exists = prev.some(f => f.symbol === stock.symbol);
+            if (exists) {
+                const newFavs = prev.filter(f => f.symbol !== stock.symbol);
+                if (activeStock?.symbol === stock.symbol) {
+                    setActiveStock(newFavs.length > 0 ? newFavs[0] : null);
+                }
+                return newFavs;
+            } else {
+                if (prev.length >= 7) {
+                    alert("즐겨찾기는 최대 7개까지만 추가할 수 있습니다.");
+                    return prev;
+                }
+                if (prev.length === 0) {
+                    setActiveStock(stock);
+                }
+                return [...prev, stock];
+            }
+        });
+    };
+
+    return (
+        <div className="container">
+            <header className="header">
+                <h1>
+                    <span className="material-symbols-outlined" style={{fontSize: '2.5rem', color: 'var(--accent-color)'}}>monitoring</span>
+                    MarketPulse
+                </h1>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <button className="btn" onClick={() => setIsSearchOpen(true)}>
+                        <span className="material-symbols-outlined">star</span>
+                        종목 검색
+                    </button>
+                </div>
+            </header>
+
+            {favorites.length > 0 ? (
+                <div className="favorites-container">
+                    {favorites.map(fav => (
+                        <FavoriteCard 
+                            key={fav.symbol} 
+                            favorite={fav} 
+                            isActive={activeStock?.symbol === fav.symbol}
+                            onClick={setActiveStock}
+                            onToggle={toggleFavorite}
+                        />
+                    ))}
+                </div>
+            ) : (
+                <div className="glass-panel" style={{padding: '2rem', textAlign: 'center', marginBottom: '2rem', color: 'var(--text-muted)'}}>
+                    즐겨찾기된 종목이 없습니다. 우측 상단의 '즐겨찾기' 버튼을 눌러 추가해주세요.
+                </div>
+            )}
+
+            <div className="main-grid">
+                <ChartSection activeStock={activeStock} />
+                <NewsSection activeStock={activeStock} />
+            </div>
+
+            <SearchModal 
+                isOpen={isSearchOpen} 
+                onClose={() => setIsSearchOpen(false)} 
+                favorites={favorites}
+                toggleFavorite={toggleFavorite}
+            />
+        </div>
+    );
+};
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+    </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+yfinance
+FinanceDataReader
+beautifulsoup4
+requests
+pandas
+lxml
