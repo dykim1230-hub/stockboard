@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 yfinance
-FinanceDataReader
+finance-datareader
 beautifulsoup4
 requests
 pandas
