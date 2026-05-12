@@ -152,7 +152,7 @@ def get_quote(symbol: str = Query(...)):
             "10. change percent": change_pct,
             "11. currency": currency
         }
-        _set_cache(cache_key, result, ttl=180)  # 3분 캐시
+        _set_cache(cache_key, result, ttl=180)
         return result
     except Exception as e:
         print(f"Quote API error for {symbol}: {e}")
@@ -175,7 +175,7 @@ def get_chart(symbol: str = Query(...)):
             index.strftime("%Y-%m-%d"): {"4. close": float(row["Close"])}
             for index, row in hist.iterrows()
         }
-        _set_cache(cache_key, data, ttl=3600)  # 1시간 캐시
+        _set_cache(cache_key, data, ttl=3600)
         return data
     except Exception as e:
         print(f"Chart API error for {symbol}: {e}")
@@ -198,38 +198,42 @@ def get_news(
         return cached
 
     result = _yahoo_rss_news(symbol)
-    _set_cache(cache_key, result, ttl=1800)  # 30분 캐시
+    if result:  # 빈 결과는 캐시하지 않음 (일시적 오류로 인한 공백 방지)
+        _set_cache(cache_key, result, ttl=1800)
     return result
 
 
 def _yahoo_rss_news(symbol: str) -> list:
-    try:
-        rss_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
-        res = requests.get(rss_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        res.raise_for_status()
-        root = ET.fromstring(res.content)
-        articles = []
-        for item in root.findall(".//item")[:10]:
-            title = item.findtext("title", "").strip()
-            url = item.findtext("link", "").strip()
-            summary = item.findtext("description", "").strip()
-            pub_date = item.findtext("pubDate", "").strip()
-            source_el = item.find("source")
-            source = source_el.text.strip() if source_el is not None else "Yahoo Finance"
-            if summary:
-                summary = BeautifulSoup(summary, "html.parser").get_text(strip=True)
-            if title and url:
-                articles.append({
-                    "title": title,
-                    "summary": summary[:120] + ("..." if len(summary) > 120 else ""),
-                    "url": url,
-                    "source": source,
-                    "time_published": pub_date
-                })
-        return articles
-    except Exception as e:
-        print(f"Yahoo RSS news error for '{symbol}': {e}")
-        return []
+    rss_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    for attempt in range(2):  # 실패 시 1회 재시도
+        try:
+            res = requests.get(rss_url, headers=headers, timeout=15)
+            res.raise_for_status()
+            root = ET.fromstring(res.content)
+            articles = []
+            for item in root.findall(".//item")[:10]:
+                title = item.findtext("title", "").strip()
+                url = item.findtext("link", "").strip()
+                summary = item.findtext("description", "").strip()
+                pub_date = item.findtext("pubDate", "").strip()
+                source_el = item.find("source")
+                source = source_el.text.strip() if source_el is not None else "Yahoo Finance"
+                if summary:
+                    summary = BeautifulSoup(summary, "html.parser").get_text(strip=True)
+                if title and url:
+                    articles.append({
+                        "title": title,
+                        "summary": summary[:120] + ("..." if len(summary) > 120 else ""),
+                        "url": url,
+                        "source": source,
+                        "time_published": pub_date
+                    })
+            if articles:
+                return articles
+        except Exception as e:
+            print(f"Yahoo RSS news error (attempt {attempt+1}) for '{symbol}': {e}")
+    return []
 
 
 if __name__ == "__main__":
