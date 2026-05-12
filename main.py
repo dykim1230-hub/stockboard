@@ -100,11 +100,12 @@ def search_stock(q: str = Query(..., description="Search query")):
                 symbol = quote.get("symbol")
                 if symbol and symbol not in added_symbols:
                     shortname = quote.get("shortname") or quote.get("longname") or symbol
+                    is_kr = is_korean_symbol(symbol)
                     results.append({
                         "1. symbol": symbol,
                         "2. name": shortname,
-                        "3. currency": "USD",
-                        "4. is_korean": False
+                        "3. currency": "KRW" if is_kr else "USD",
+                        "4. is_korean": is_kr
                     })
                     added_symbols.add(symbol)
         except Exception as e:
@@ -174,102 +175,9 @@ def get_chart(symbol: str = Query(..., description="Stock symbol")):
         return None
 
 
-def _naver_news(query: str) -> list:
-    """네이버 뉴스 최신순 스크래핑"""
-    import re
-    from urllib.parse import urlparse
-    from collections import defaultdict
-
-    try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Accept-Language": "ko-KR,ko;q=0.9",
-        }
-        res = requests.get(
-            "https://search.naver.com/search.naver",
-            params={"where": "news", "query": query, "sort": 1},
-            headers=headers,
-            timeout=10
-        )
-        res.encoding = "utf-8"
-        soup = BeautifulSoup(res.text, "html.parser")
-
-        time_pattern = re.compile(r"\d+분 전|\d+시간 전|\d+일 전|방금 전|어제|\d{4}\.\d{2}\.\d{2}")
-        url_to_texts = defaultdict(list)
-        url_order = []
-
-        # 기사 URL(경로 있는 외부 링크)별로 텍스트 수집
-        for a in soup.find_all("a", href=True):
-            href = a["href"]
-            if not href.startswith("http"):
-                continue
-            if "naver.com" in href or "keep.naver" in href:
-                continue
-            parsed = urlparse(href)
-            if not parsed.path or parsed.path == "/":
-                continue
-            text = a.get_text(strip=True)
-            if not text:
-                continue
-            if href not in url_to_texts:
-                url_order.append(href)
-            url_to_texts[href].append(text)
-
-        articles = []
-        for href in url_order:
-            if len(articles) >= 10:
-                break
-            texts = url_to_texts[href]
-            if not texts:
-                continue
-
-            # 가장 짧은 텍스트 = 제목, 가장 긴 텍스트 = 요약
-            title = min(texts, key=len)
-            summary = max(texts, key=len) if len(texts) > 1 else ""
-            if summary == title:
-                summary = ""
-
-            # 링크 주변 컨테이너에서 시간/언론사 추출
-            time_published = ""
-            source = ""
-            for a in soup.find_all("a", href=True):
-                if a["href"] != href:
-                    continue
-                container = a
-                for _ in range(8):
-                    container = container.parent
-                    if not container:
-                        break
-                    full_text = container.get_text(" ", strip=True)
-                    if not time_published:
-                        m = time_pattern.search(full_text)
-                        if m:
-                            time_published = m.group()
-                    if not source:
-                        for sa in container.find_all("a", href=True):
-                            sh = sa.get("href", "")
-                            if sh.startswith("http") and "naver.com" not in sh:
-                                sp = urlparse(sh)
-                                if not sp.path or sp.path == "/":
-                                    st = sa.get_text(strip=True)
-                                    if st:
-                                        source = st
-                    if time_published and source:
-                        break
-                break
-
-            articles.append({
-                "title": title,
-                "summary": summary[:120] + ("..." if len(summary) > 120 else ""),
-                "url": href,
-                "source": source,
-                "time_published": time_published
-            })
-
-        return articles
-    except Exception as e:
-        print(f"Naver News error for '{query}': {e}")
-        return []
+def _naver_news(symbol: str) -> list:
+    """네이버 금융 RSS로 국내 종목 뉴스 조회 (Yahoo RSS 국내 종목 버전)"""
+    return _yahoo_rss_news(symbol)
 
 
 def _yahoo_rss_news(symbol: str) -> list:
@@ -315,19 +223,15 @@ def _yahoo_rss_news(symbol: str) -> list:
 @app.get("/api/news")
 def get_news(
     stock_name: str = Query(..., description="Stock name for display/search"),
-    symbol: str = Query(None, description="Stock symbol (required for international stocks)"),
+    symbol: str = Query(None, description="Stock symbol"),
     is_korean: bool = Query(True, description="Korean stock flag")
 ):
     """
-    국내 종목: 네이버 뉴스 최신순 스크래핑
-    해외 종목: yfinance 뉴스 (종목명 자동 매핑)
+    Yahoo Finance RSS로 모든 종목 뉴스 조회 (국내/해외 공통)
     """
-    if is_korean:
-        return _naver_news(f"{stock_name} 주식")
-    else:
-        if not symbol:
-            return []
-        return _yahoo_rss_news(symbol)
+    if not symbol:
+        return []
+    return _yahoo_rss_news(symbol)
 
 
 if __name__ == "__main__":
