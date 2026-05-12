@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 import yfinance as yf
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime
 import FinanceDataReader as fdr
+import time
+import xml.etree.ElementTree as ET
 
 app = FastAPI(title="Stock Dashboard API")
 
@@ -16,7 +17,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global cache for KRX and ETF listings
+# ── TTL 캐시 ───────────────────────────────────────────────
+_cache: dict = {}
+
+def _get_cache(key):
+    if key in _cache:
+        value, exp = _cache[key]
+        if time.time() < exp:
+            return value, True
+    return None, False
+
+def _set_cache(key, value, ttl: int):
+    _cache[key] = (value, time.time() + ttl)
+
+# ── KRX 데이터 (검색용) ────────────────────────────────────
 krx_df = None
 etf_df = None
 
@@ -24,26 +38,25 @@ def get_krx_data():
     global krx_df, etf_df
     if krx_df is None:
         try:
-            print("Loading KRX and ETF listings for search...")
             krx_df = fdr.StockListing('KRX')
             etf_df = fdr.StockListing('ETF/KR')
-            print("Listings loaded successfully.")
         except Exception as e:
             print("Failed to load KRX/ETF data:", e)
     return krx_df, etf_df
 
 def is_korean_symbol(symbol: str) -> bool:
-    """Check if symbol is a Korean stock (ends with .KS or .KQ)"""
     return symbol.endswith('.KS') or symbol.endswith('.KQ')
 
+# ── 검색 ──────────────────────────────────────────────────
 @app.get("/api/search")
-def search_stock(q: str = Query(..., description="Search query")):
-    """
-    Search for stocks: Korean stocks/ETFs first via FinanceDataReader,
-    then international via Yahoo Finance.
-    """
+def search_stock(q: str = Query(...)):
     if not q:
         return []
+
+    cache_key = f"search:{q.lower()}"
+    cached, hit = _get_cache(cache_key)
+    if hit:
+        return cached
 
     results = []
     added_symbols = set()
@@ -56,7 +69,6 @@ def search_stock(q: str = Query(..., description="Search query")):
         code_col = 'Symbol' if is_etf else 'Code'
         name_col = 'Name'
         market_col = 'Market' if not is_etf else None
-
         if name_col in df.columns and code_col in df.columns:
             matches = df[
                 df[name_col].str.contains(q, case=False, na=False) |
@@ -68,10 +80,7 @@ def search_stock(q: str = Query(..., description="Search query")):
                     yf_symbol = f"{code}.KS"
                 else:
                     market = str(row.get(market_col, ''))
-                    if 'KOSDAQ' in market:
-                        yf_symbol = f"{code}.KQ"
-                    else:
-                        yf_symbol = f"{code}.KS"
+                    yf_symbol = f"{code}.KQ" if 'KOSDAQ' in market else f"{code}.KS"
                 if yf_symbol not in added_symbols:
                     results.append({
                         "1. symbol": yf_symbol,
@@ -87,16 +96,14 @@ def search_stock(q: str = Query(..., description="Search query")):
     except Exception as e:
         print("FDR search error:", e)
 
-    # International via Yahoo Finance
     if len(results) < 7:
         try:
             url = "https://query2.finance.yahoo.com/v1/finance/search"
-            params = {"q": q, "quotesCount": 6, "newsCount": 0}
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            res = requests.get(url, params=params, headers=headers)
+            params = {"q": q, "quotesCount": 7, "newsCount": 0}
+            headers = {"User-Agent": "Mozilla/5.0"}
+            res = requests.get(url, params=params, headers=headers, timeout=5)
             res.raise_for_status()
-            data = res.json()
-            for quote in data.get("quotes", []):
+            for quote in res.json().get("quotes", []):
                 symbol = quote.get("symbol")
                 if symbol and symbol not in added_symbols:
                     shortname = quote.get("shortname") or quote.get("longname") or symbol
@@ -111,88 +118,97 @@ def search_stock(q: str = Query(..., description="Search query")):
         except Exception as e:
             print(f"Yahoo Search API error: {e}")
 
-    return results[:10]
+    result = results[:10]
+    _set_cache(cache_key, result, ttl=300)  # 5분 캐시
+    return result
 
 
+# ── 현재가 ────────────────────────────────────────────────
 @app.get("/api/quote")
-def get_quote(symbol: str = Query(..., description="Stock symbol")):
-    """
-    Get current quote. Returns price with currency info (KRW or USD).
-    """
+def get_quote(symbol: str = Query(...)):
+    cache_key = f"quote:{symbol}"
+    cached, hit = _get_cache(cache_key)
+    if hit:
+        return cached
+
     try:
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
+        fi = yf.Ticker(symbol).fast_info
+        price = fi.last_price
+        prev = fi.previous_close
 
-        price = info.get("currentPrice") or info.get("regularMarketPrice")
         if price is None:
-            hist = ticker.history(period="2d")
-            if not hist.empty:
-                price = float(hist["Close"].iloc[-1])
-                prev = float(hist["Close"].iloc[-2]) if len(hist) > 1 else price
-            else:
-                return None
-        else:
-            prev = info.get("previousClose") or info.get("regularMarketPreviousClose") or price
+            return None
 
+        prev = prev or price
         price = float(price)
         prev = float(prev)
         change = price - prev
         change_pct = (change / prev * 100) if prev else 0.0
+        currency = fi.currency or ("KRW" if is_korean_symbol(symbol) else "USD")
 
-        # Detect currency from yfinance info, fallback to symbol suffix
-        currency = info.get("currency", "")
-        if not currency:
-            currency = "KRW" if is_korean_symbol(symbol) else "USD"
-
-        return {
+        result = {
             "05. price": price,
             "09. change": change,
             "10. change percent": change_pct,
             "11. currency": currency
         }
+        _set_cache(cache_key, result, ttl=180)  # 3분 캐시
+        return result
     except Exception as e:
         print(f"Quote API error for {symbol}: {e}")
         return None
 
 
+# ── 차트 ──────────────────────────────────────────────────
 @app.get("/api/chart")
-def get_chart(symbol: str = Query(..., description="Stock symbol")):
-    """
-    Get 1-year daily OHLCV data.
-    """
+def get_chart(symbol: str = Query(...)):
+    cache_key = f"chart:{symbol}"
+    cached, hit = _get_cache(cache_key)
+    if hit:
+        return cached
+
     try:
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period="1y")
+        hist = yf.Ticker(symbol).history(period="1y")
         if hist.empty:
             return None
-        data = {}
-        for index, row in hist.iterrows():
-            date_str = index.strftime("%Y-%m-%d")
-            data[date_str] = {"4. close": float(row["Close"])}
+        data = {
+            index.strftime("%Y-%m-%d"): {"4. close": float(row["Close"])}
+            for index, row in hist.iterrows()
+        }
+        _set_cache(cache_key, data, ttl=3600)  # 1시간 캐시
         return data
     except Exception as e:
         print(f"Chart API error for {symbol}: {e}")
         return None
 
 
-def _naver_news(symbol: str) -> list:
-    """네이버 금융 RSS로 국내 종목 뉴스 조회 (Yahoo RSS 국내 종목 버전)"""
-    return _yahoo_rss_news(symbol)
+# ── 뉴스 ──────────────────────────────────────────────────
+@app.get("/api/news")
+def get_news(
+    stock_name: str = Query(...),
+    symbol: str = Query(None),
+    is_korean: bool = Query(True)
+):
+    if not symbol:
+        return []
+
+    cache_key = f"news:{symbol}"
+    cached, hit = _get_cache(cache_key)
+    if hit:
+        return cached
+
+    result = _yahoo_rss_news(symbol)
+    _set_cache(cache_key, result, ttl=1800)  # 30분 캐시
+    return result
 
 
 def _yahoo_rss_news(symbol: str) -> list:
-    """Yahoo Finance RSS 피드로 해외 종목 최신 뉴스 조회"""
-    import xml.etree.ElementTree as ET
     try:
         rss_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        res = requests.get(rss_url, headers=headers, timeout=10)
+        res = requests.get(rss_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         res.raise_for_status()
-
         root = ET.fromstring(res.content)
-        ns = {"media": "http://search.yahoo.com/mrss/"}
         articles = []
-
         for item in root.findall(".//item")[:10]:
             title = item.findtext("title", "").strip()
             url = item.findtext("link", "").strip()
@@ -200,11 +216,8 @@ def _yahoo_rss_news(symbol: str) -> list:
             pub_date = item.findtext("pubDate", "").strip()
             source_el = item.find("source")
             source = source_el.text.strip() if source_el is not None else "Yahoo Finance"
-
-            # HTML 태그 제거
             if summary:
                 summary = BeautifulSoup(summary, "html.parser").get_text(strip=True)
-
             if title and url:
                 articles.append({
                     "title": title,
@@ -213,25 +226,10 @@ def _yahoo_rss_news(symbol: str) -> list:
                     "source": source,
                     "time_published": pub_date
                 })
-
         return articles
     except Exception as e:
         print(f"Yahoo RSS news error for '{symbol}': {e}")
         return []
-
-
-@app.get("/api/news")
-def get_news(
-    stock_name: str = Query(..., description="Stock name for display/search"),
-    symbol: str = Query(None, description="Stock symbol"),
-    is_korean: bool = Query(True, description="Korean stock flag")
-):
-    """
-    Yahoo Finance RSS로 모든 종목 뉴스 조회 (국내/해외 공통)
-    """
-    if not symbol:
-        return []
-    return _yahoo_rss_news(symbol)
 
 
 if __name__ == "__main__":
