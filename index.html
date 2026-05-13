@@ -25,9 +25,29 @@
     
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
     <div id="root"></div>
+
+    <!-- Firebase Init -->
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBtBqfY7t5xeMHgx1E3BMuW16H1TUvOIg4",
+            authDomain: "portfolio-4ffcf.firebaseapp.com",
+            projectId: "portfolio-4ffcf",
+            storageBucket: "portfolio-4ffcf.firebasestorage.app",
+            messagingSenderId: "399133068539",
+            appId: "1:399133068539:web:73615f30a6017f8e0c345e"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+    </script>
 
     <!-- Application Script -->
     <script type="text/babel">
@@ -120,6 +140,114 @@ const formatTooltip = (val, currency) => {
 };
 
 // --- Components ---
+
+const AuthModal = ({ isOpen, onClose }) => {
+    const [mode, setMode] = useState('login');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!isOpen) {
+            setEmail('');
+            setPassword('');
+            setError('');
+            setMode('login');
+        }
+    }, [isOpen]);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+        try {
+            if (mode === 'login') {
+                await auth.signInWithEmailAndPassword(email, password);
+            } else {
+                await auth.createUserWithEmailAndPassword(email, password);
+            }
+            onClose();
+        } catch (err) {
+            const messages = {
+                'auth/user-not-found': '등록되지 않은 이메일입니다.',
+                'auth/wrong-password': '비밀번호가 올바르지 않습니다.',
+                'auth/email-already-in-use': '이미 사용 중인 이메일입니다.',
+                'auth/weak-password': '비밀번호는 6자 이상이어야 합니다.',
+                'auth/invalid-email': '올바르지 않은 이메일 형식입니다.',
+                'auth/invalid-credential': '이메일 또는 비밀번호가 올바르지 않습니다.',
+            };
+            setError(messages[err.code] || '오류가 발생했습니다. 다시 시도해주세요.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '400px'}}>
+                <div className="modal-header">
+                    <h2 className="modal-title">{mode === 'login' ? '로그인' : '회원가입'}</h2>
+                    <button className="close-btn" onClick={onClose}>
+                        <span className="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <div className="modal-body">
+                    <form onSubmit={handleSubmit} style={{display:'flex', flexDirection:'column', gap:'1rem'}}>
+                        <div className="search-input-wrapper">
+                            <span className="material-symbols-outlined">mail</span>
+                            <input
+                                type="email"
+                                className="search-input"
+                                placeholder="이메일"
+                                value={email}
+                                onChange={e => setEmail(e.target.value)}
+                                required
+                                autoFocus
+                            />
+                        </div>
+                        <div className="search-input-wrapper">
+                            <span className="material-symbols-outlined">lock</span>
+                            <input
+                                type="password"
+                                className="search-input"
+                                placeholder="비밀번호 (6자 이상)"
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                                required
+                            />
+                        </div>
+                        {error && (
+                            <div style={{color:'#ef4444', fontSize:'0.85rem', padding:'0.5rem', background:'rgba(239,68,68,0.1)', borderRadius:'6px'}}>
+                                {error}
+                            </div>
+                        )}
+                        <button type="submit" className="btn" disabled={loading} style={{width:'100%', justifyContent:'center', padding:'0.75rem'}}>
+                            {loading ? '처리 중...' : (mode === 'login' ? '로그인' : '회원가입')}
+                        </button>
+                    </form>
+                    <div style={{textAlign:'center', marginTop:'1.25rem', fontSize:'0.85rem', color:'var(--text-muted)'}}>
+                        {mode === 'login' ? (
+                            <>계정이 없으신가요?{' '}
+                                <span style={{color:'var(--accent-color)', cursor:'pointer'}} onClick={() => { setMode('signup'); setError(''); }}>
+                                    회원가입
+                                </span>
+                            </>
+                        ) : (
+                            <>이미 계정이 있으신가요?{' '}
+                                <span style={{color:'var(--accent-color)', cursor:'pointer'}} onClick={() => { setMode('login'); setError(''); }}>
+                                    로그인
+                                </span>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const SearchModal = ({ isOpen, onClose, favorites, toggleFavorite }) => {
     const [query, setQuery] = useState('');
@@ -490,11 +618,44 @@ const NewsSection = ({ activeStock }) => {
 };
 
 const App = () => {
-    const [favorites, setFavorites] = useState([
-        { symbol: 'AAPL', name: 'Apple Inc', currency: 'USD', isKorean: false }
-    ]);
-    const [activeStock, setActiveStock] = useState(favorites[0]);
+    const [favorites, setFavorites] = useState([]);
+    const [activeStock, setActiveStock] = useState(null);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [isAuthOpen, setIsAuthOpen] = useState(false);
+    const [user, setUser] = useState(null);
+    const [authLoading, setAuthLoading] = useState(true);
+    const firestoreReady = useRef(false);
+
+    useEffect(() => {
+        const unsubscribe = auth.onAuthStateChanged((u) => {
+            setUser(u);
+            setAuthLoading(false);
+        });
+        return unsubscribe;
+    }, []);
+
+    useEffect(() => {
+        if (!user) {
+            setFavorites([]);
+            setActiveStock(null);
+            firestoreReady.current = false;
+            return;
+        }
+        firestoreReady.current = false;
+        db.collection('users').doc(user.uid).get().then(doc => {
+            if (doc.exists && doc.data().favorites) {
+                const favs = doc.data().favorites;
+                setFavorites(favs);
+                if (favs.length > 0) setActiveStock(favs[0]);
+            }
+            firestoreReady.current = true;
+        });
+    }, [user]);
+
+    useEffect(() => {
+        if (!user || !firestoreReady.current) return;
+        db.collection('users').doc(user.uid).set({ favorites }, { merge: true });
+    }, [favorites, user]);
 
     const toggleFavorite = (stock) => {
         setFavorites(prev => {
@@ -510,13 +671,21 @@ const App = () => {
                     alert("즐겨찾기는 최대 7개까지만 추가할 수 있습니다.");
                     return prev;
                 }
-                if (prev.length === 0) {
-                    setActiveStock(stock);
-                }
+                if (prev.length === 0) setActiveStock(stock);
                 return [...prev, stock];
             }
         });
     };
+
+    const handleLogout = () => auth.signOut();
+
+    if (authLoading) {
+        return (
+            <div style={{display:'flex', alignItems:'center', justifyContent:'center', height:'100vh'}}>
+                <div className="spinner"></div>
+            </div>
+        );
+    }
 
     return (
         <div className="container">
@@ -526,19 +695,43 @@ const App = () => {
                     MarketPulse
                 </h1>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <button className="btn" onClick={() => setIsSearchOpen(true)}>
-                        <span className="material-symbols-outlined">star</span>
-                        종목 검색
-                    </button>
+                    {user ? (
+                        <>
+                            <span style={{fontSize:'0.8rem', color:'var(--text-muted)'}}>{user.email}</span>
+                            <button className="btn" onClick={() => setIsSearchOpen(true)}>
+                                <span className="material-symbols-outlined">star</span>
+                                종목 검색
+                            </button>
+                            <button className="btn" onClick={handleLogout} style={{background:'transparent', border:'1px solid rgba(255,255,255,0.15)'}}>
+                                <span className="material-symbols-outlined">logout</span>
+                                로그아웃
+                            </button>
+                        </>
+                    ) : (
+                        <button className="btn" onClick={() => setIsAuthOpen(true)}>
+                            <span className="material-symbols-outlined">login</span>
+                            로그인
+                        </button>
+                    )}
                 </div>
             </header>
 
-            {favorites.length > 0 ? (
+            {!user ? (
+                <div className="glass-panel" style={{padding: '3rem', textAlign: 'center', marginBottom: '2rem', color: 'var(--text-muted)'}}>
+                    <span className="material-symbols-outlined" style={{fontSize:'3rem', display:'block', marginBottom:'1rem'}}>lock</span>
+                    로그인하면 즐겨찾기 종목을 저장하고 어디서든 확인할 수 있습니다.
+                    <br/>
+                    <button className="btn" onClick={() => setIsAuthOpen(true)} style={{marginTop:'1.5rem'}}>
+                        <span className="material-symbols-outlined">login</span>
+                        로그인 / 회원가입
+                    </button>
+                </div>
+            ) : favorites.length > 0 ? (
                 <div className="favorites-container">
                     {favorites.map(fav => (
-                        <FavoriteCard 
-                            key={fav.symbol} 
-                            favorite={fav} 
+                        <FavoriteCard
+                            key={fav.symbol}
+                            favorite={fav}
                             isActive={activeStock?.symbol === fav.symbol}
                             onClick={setActiveStock}
                             onToggle={toggleFavorite}
@@ -547,7 +740,7 @@ const App = () => {
                 </div>
             ) : (
                 <div className="glass-panel" style={{padding: '2rem', textAlign: 'center', marginBottom: '2rem', color: 'var(--text-muted)'}}>
-                    즐겨찾기된 종목이 없습니다. 우측 상단의 '즐겨찾기' 버튼을 눌러 추가해주세요.
+                    즐겨찾기된 종목이 없습니다. 우측 상단의 '종목 검색' 버튼을 눌러 추가해주세요.
                 </div>
             )}
 
@@ -556,9 +749,13 @@ const App = () => {
                 <NewsSection activeStock={activeStock} />
             </div>
 
-            <SearchModal 
-                isOpen={isSearchOpen} 
-                onClose={() => setIsSearchOpen(false)} 
+            <AuthModal
+                isOpen={isAuthOpen}
+                onClose={() => setIsAuthOpen(false)}
+            />
+            <SearchModal
+                isOpen={isSearchOpen}
+                onClose={() => setIsSearchOpen(false)}
                 favorites={favorites}
                 toggleFavorite={toggleFavorite}
             />
