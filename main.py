@@ -9,6 +9,7 @@ import time
 import xml.etree.ElementTree as ET
 import os
 import json
+import urllib.parse
 
 # ── Firebase Admin ─────────────────────────────────────────
 import firebase_admin
@@ -238,42 +239,45 @@ def get_news(
     if hit:
         return cached
 
-    result = _yahoo_rss_news(symbol)
-    if result:  # 빈 결과는 캐시하지 않음 (일시적 오류로 인한 공백 방지)
+    result = _google_news_rss(stock_name, is_korean)
+    if result:
         _set_cache(cache_key, result, ttl=1800)
     return result
 
 
-def _yahoo_rss_news(symbol: str) -> list:
-    rss_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
+def _google_news_rss(stock_name: str, is_korean: bool) -> list:
+    if is_korean:
+        query = urllib.parse.quote(stock_name)
+        url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
+    else:
+        query = urllib.parse.quote(f"{stock_name} stock")
+        url = f"https://news.google.com/rss/search?q={query}&hl=en&gl=US&ceid=US:en"
+
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    for attempt in range(2):  # 실패 시 1회 재시도
+    for attempt in range(2):
         try:
-            res = requests.get(rss_url, headers=headers, timeout=15)
+            res = requests.get(url, headers=headers, timeout=15)
             res.raise_for_status()
             root = ET.fromstring(res.content)
             articles = []
             for item in root.findall(".//item")[:10]:
                 title = item.findtext("title", "").strip()
-                url = item.findtext("link", "").strip()
-                summary = item.findtext("description", "").strip()
+                link = item.findtext("link", "").strip()
                 pub_date = item.findtext("pubDate", "").strip()
                 source_el = item.find("source")
-                source = source_el.text.strip() if source_el is not None else "Yahoo Finance"
-                if summary:
-                    summary = BeautifulSoup(summary, "html.parser").get_text(strip=True)
-                if title and url:
+                source = source_el.text.strip() if source_el is not None else "Google News"
+                if title and link:
                     articles.append({
                         "title": title,
-                        "summary": summary[:120] + ("..." if len(summary) > 120 else ""),
-                        "url": url,
+                        "summary": "",
+                        "url": link,
                         "source": source,
                         "time_published": pub_date
                     })
             if articles:
                 return articles
         except Exception as e:
-            print(f"Yahoo RSS news error (attempt {attempt+1}) for '{symbol}': {e}")
+            print(f"Google News RSS error (attempt {attempt+1}) for '{stock_name}': {e}")
     return []
 
 
