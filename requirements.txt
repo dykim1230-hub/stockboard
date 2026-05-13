@@ -6,3 +6,4 @@ beautifulsoup4
 requests
 pandas
 lxml
+firebase-admin

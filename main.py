@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import yfinance as yf
 import requests
@@ -7,6 +7,47 @@ from bs4 import BeautifulSoup
 import FinanceDataReader as fdr
 import time
 import xml.etree.ElementTree as ET
+import os
+import json
+
+# ── Firebase Admin ─────────────────────────────────────────
+import firebase_admin
+from firebase_admin import credentials, auth as admin_auth
+
+_admin_initialized = False
+
+def _init_firebase_admin():
+    global _admin_initialized
+    if _admin_initialized:
+        return True
+    sa_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
+    if not sa_json:
+        return False
+    try:
+        cred = credentials.Certificate(json.loads(sa_json))
+        firebase_admin.initialize_app(cred)
+        _admin_initialized = True
+        return True
+    except Exception as e:
+        print(f"Firebase Admin init error: {e}")
+        return False
+
+ADMIN_UIDS = set(filter(None, os.environ.get("ADMIN_UIDS", "").split(",")))
+
+def _verify_token(authorization: str) -> dict:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = authorization[7:]
+    try:
+        return admin_auth.verify_id_token(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+def _verify_admin(authorization: str) -> dict:
+    decoded = _verify_token(authorization)
+    if decoded["uid"] not in ADMIN_UIDS:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return decoded
 
 app = FastAPI(title="Stock Dashboard API")
 
@@ -236,8 +277,55 @@ def _yahoo_rss_news(symbol: str) -> list:
     return []
 
 
+# ── Admin API ──────────────────────────────────────────────
+
+@app.get("/api/admin/check")
+def admin_check(authorization: str = Header(None)):
+    if not _init_firebase_admin() or not authorization:
+        return {"is_admin": False}
+    try:
+        decoded = _verify_token(authorization)
+        return {"is_admin": decoded["uid"] in ADMIN_UIDS}
+    except Exception:
+        return {"is_admin": False}
+
+@app.get("/api/admin/users")
+def admin_list_users(authorization: str = Header(None)):
+    if not _init_firebase_admin():
+        raise HTTPException(status_code=503, detail="Admin SDK not configured")
+    _verify_admin(authorization)
+    users = []
+    for u in admin_auth.list_users().iterate_all():
+        users.append({
+            "uid": u.uid,
+            "email": u.email or "",
+            "last_sign_in": u.user_metadata.last_sign_in_time,
+            "created": u.user_metadata.creation_time,
+        })
+    users.sort(key=lambda x: x["last_sign_in"] or 0, reverse=True)
+    return users
+
+@app.delete("/api/admin/users/{uid}")
+def admin_delete_user(uid: str, authorization: str = Header(None)):
+    if not _init_firebase_admin():
+        raise HTTPException(status_code=503, detail="Admin SDK not configured")
+    _verify_admin(authorization)
+    admin_auth.delete_user(uid)
+    return {"success": True}
+
+@app.post("/api/admin/users/{uid}/reset-password")
+def admin_reset_password(uid: str, authorization: str = Header(None)):
+    if not _init_firebase_admin():
+        raise HTTPException(status_code=503, detail="Admin SDK not configured")
+    _verify_admin(authorization)
+    user = admin_auth.get_user(uid)
+    if not user.email:
+        raise HTTPException(status_code=400, detail="No email")
+    link = admin_auth.generate_password_reset_link(user.email)
+    return {"success": True, "email": user.email, "reset_link": link}
+
+
 if __name__ == "__main__":
     import uvicorn
-    import os
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)

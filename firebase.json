@@ -1,0 +1,24 @@
+{
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      ".firebaserc",
+      "Procfile",
+      "main.py",
+      "requirements.txt",
+      ".gitignore",
+      ".python-version",
+      "test_news.py",
+      "__pycache__/**",
+      ".git/**",
+      "*.pyc"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

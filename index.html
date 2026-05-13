@@ -139,7 +139,220 @@ const formatTooltip = (val, currency) => {
     return '$' + val.toFixed(2);
 };
 
+// --- Admin API helpers ---
+const adminFetch = async (path, options = {}) => {
+    const token = await auth.currentUser.getIdToken();
+    const res = await fetch(`${BASE_URL.replace('/api', '')}${path}`, {
+        ...options,
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', ...(options.headers || {}) }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+};
+
 // --- Components ---
+
+const ProfileModal = ({ isOpen, onClose, user }) => {
+    const [tab, setTab] = useState('password');
+    const [curPw, setCurPw] = useState('');
+    const [newPw, setNewPw] = useState('');
+    const [confirmPw, setConfirmPw] = useState('');
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!isOpen) { setCurPw(''); setNewPw(''); setConfirmPw(''); setError(''); setSuccess(''); setTab('password'); }
+    }, [isOpen]);
+
+    const reauth = async (password) => {
+        const credential = firebase.auth.EmailAuthProvider.credential(user.email, password);
+        await auth.currentUser.reauthenticateWithCredential(credential);
+    };
+
+    const handlePasswordChange = async (e) => {
+        e.preventDefault();
+        if (newPw !== confirmPw) { setError('새 비밀번호가 일치하지 않습니다.'); return; }
+        if (newPw.length < 6) { setError('비밀번호는 6자 이상이어야 합니다.'); return; }
+        setError(''); setLoading(true);
+        try {
+            await reauth(curPw);
+            await auth.currentUser.updatePassword(newPw);
+            setSuccess('비밀번호가 변경되었습니다.');
+            setCurPw(''); setNewPw(''); setConfirmPw('');
+        } catch (err) {
+            const msgs = { 'auth/wrong-password': '현재 비밀번호가 올바르지 않습니다.', 'auth/invalid-credential': '현재 비밀번호가 올바르지 않습니다.' };
+            setError(msgs[err.code] || '오류가 발생했습니다.');
+        } finally { setLoading(false); }
+    };
+
+    const handleWithdraw = async (e) => {
+        e.preventDefault();
+        if (!window.confirm('정말 탈퇴하시겠습니까? 모든 데이터가 삭제됩니다.')) return;
+        setError(''); setLoading(true);
+        try {
+            await reauth(curPw);
+            await db.collection('users').doc(user.uid).delete();
+            await auth.currentUser.delete();
+            onClose();
+        } catch (err) {
+            const msgs = { 'auth/wrong-password': '비밀번호가 올바르지 않습니다.', 'auth/invalid-credential': '비밀번호가 올바르지 않습니다.' };
+            setError(msgs[err.code] || '오류가 발생했습니다.');
+        } finally { setLoading(false); }
+    };
+
+    if (!isOpen || !user) return null;
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth:'420px'}}>
+                <div className="modal-header">
+                    <h2 className="modal-title">내 계정</h2>
+                    <button className="close-btn" onClick={onClose}><span className="material-symbols-outlined">close</span></button>
+                </div>
+                <div className="modal-body">
+                    <div style={{fontSize:'0.82rem', color:'var(--text-muted)', marginBottom:'1rem'}}>{user.email}</div>
+                    <div style={{display:'flex', gap:'0.5rem', marginBottom:'1.25rem'}}>
+                        {['password','withdraw'].map(t => (
+                            <button key={t} onClick={() => { setTab(t); setError(''); setSuccess(''); }}
+                                className="timeframe-btn" style={{flex:1, padding:'0.5rem', ...(tab===t ? {background:'var(--accent-color)', color:'#fff'} : {})}}>
+                                {t === 'password' ? '비밀번호 변경' : '회원 탈퇴'}
+                            </button>
+                        ))}
+                    </div>
+
+                    {tab === 'password' && (
+                        <form onSubmit={handlePasswordChange} style={{display:'flex', flexDirection:'column', gap:'0.75rem'}}>
+                            {[['현재 비밀번호', curPw, setCurPw], ['새 비밀번호', newPw, setNewPw], ['새 비밀번호 확인', confirmPw, setConfirmPw]].map(([label, val, set]) => (
+                                <div key={label} className="search-input-wrapper">
+                                    <span className="material-symbols-outlined">lock</span>
+                                    <input type="password" className="search-input" placeholder={label} value={val} onChange={e => set(e.target.value)} required />
+                                </div>
+                            ))}
+                            {error && <div style={{color:'#ef4444', fontSize:'0.85rem'}}>{error}</div>}
+                            {success && <div style={{color:'#10b981', fontSize:'0.85rem'}}>{success}</div>}
+                            <button type="submit" className="btn" disabled={loading} style={{justifyContent:'center'}}>
+                                {loading ? '처리 중...' : '변경'}
+                            </button>
+                        </form>
+                    )}
+
+                    {tab === 'withdraw' && (
+                        <form onSubmit={handleWithdraw} style={{display:'flex', flexDirection:'column', gap:'0.75rem'}}>
+                            <div style={{color:'#ef4444', fontSize:'0.85rem', padding:'0.75rem', background:'rgba(239,68,68,0.1)', borderRadius:'6px'}}>
+                                탈퇴 시 즐겨찾기 등 모든 데이터가 영구 삭제됩니다.
+                            </div>
+                            <div className="search-input-wrapper">
+                                <span className="material-symbols-outlined">lock</span>
+                                <input type="password" className="search-input" placeholder="비밀번호 확인" value={curPw} onChange={e => setCurPw(e.target.value)} required />
+                            </div>
+                            {error && <div style={{color:'#ef4444', fontSize:'0.85rem'}}>{error}</div>}
+                            <button type="submit" className="btn" disabled={loading}
+                                style={{justifyContent:'center', background:'#ef4444', border:'none'}}>
+                                {loading ? '처리 중...' : '탈퇴하기'}
+                            </button>
+                        </form>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const AdminModal = ({ isOpen, onClose, currentUid }) => {
+    const [users, setUsers] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [msg, setMsg] = useState('');
+
+    useEffect(() => {
+        if (!isOpen) { setMsg(''); return; }
+        setLoading(true);
+        adminFetch('/api/admin/users')
+            .then(data => setUsers(data))
+            .catch(() => setMsg('사용자 목록을 불러오지 못했습니다.'))
+            .finally(() => setLoading(false));
+    }, [isOpen]);
+
+    const formatDate = (ms) => {
+        if (!ms) return '-';
+        return new Date(ms).toLocaleString('ko-KR', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+    };
+
+    const handleDelete = async (uid, email) => {
+        if (!window.confirm(`${email} 계정을 삭제하시겠습니까?`)) return;
+        try {
+            await adminFetch(`/api/admin/users/${uid}`, { method: 'DELETE' });
+            await db.collection('users').doc(uid).delete();
+            setUsers(prev => prev.filter(u => u.uid !== uid));
+            setMsg(`${email} 삭제 완료`);
+        } catch { setMsg('삭제 실패'); }
+    };
+
+    const handleResetPw = async (uid, email) => {
+        if (!window.confirm(`${email}으로 비밀번호 초기화 링크를 발송하시겠습니까?`)) return;
+        try {
+            await adminFetch(`/api/admin/users/${uid}/reset-password`, { method: 'POST' });
+            setMsg(`${email}로 초기화 링크 발송 완료`);
+        } catch { setMsg('발송 실패'); }
+    };
+
+    if (!isOpen) return null;
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth:'700px', width:'95vw'}}>
+                <div className="modal-header">
+                    <h2 className="modal-title">관리자 — 회원 관리</h2>
+                    <button className="close-btn" onClick={onClose}><span className="material-symbols-outlined">close</span></button>
+                </div>
+                <div className="modal-body">
+                    {msg && <div style={{marginBottom:'0.75rem', fontSize:'0.85rem', color:'#10b981'}}>{msg}</div>}
+                    {loading ? <div className="spinner"></div> : (
+                        <div style={{overflowX:'auto'}}>
+                            <table style={{width:'100%', borderCollapse:'collapse', fontSize:'0.82rem'}}>
+                                <thead>
+                                    <tr style={{borderBottom:'1px solid rgba(255,255,255,0.1)', color:'var(--text-muted)'}}>
+                                        <th style={{padding:'0.5rem', textAlign:'left'}}>이메일</th>
+                                        <th style={{padding:'0.5rem', textAlign:'left'}}>최근 접속</th>
+                                        <th style={{padding:'0.5rem', textAlign:'left'}}>가입일</th>
+                                        <th style={{padding:'0.5rem', textAlign:'center'}}>관리</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {users.map(u => (
+                                        <tr key={u.uid} style={{borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
+                                            <td style={{padding:'0.6rem 0.5rem'}}>
+                                                {u.email}
+                                                {u.uid === currentUid && <span style={{marginLeft:'0.4rem', fontSize:'0.7rem', color:'var(--accent-color)'}}>나</span>}
+                                            </td>
+                                            <td style={{padding:'0.6rem 0.5rem', color:'var(--text-muted)'}}>{formatDate(u.last_sign_in)}</td>
+                                            <td style={{padding:'0.6rem 0.5rem', color:'var(--text-muted)'}}>{formatDate(u.created)}</td>
+                                            <td style={{padding:'0.6rem 0.5rem', textAlign:'center'}}>
+                                                <div style={{display:'flex', gap:'0.4rem', justifyContent:'center'}}>
+                                                    <button className="btn" onClick={() => handleResetPw(u.uid, u.email)}
+                                                        style={{fontSize:'0.72rem', padding:'0.3rem 0.6rem', background:'rgba(255,255,255,0.08)'}}>
+                                                        비번초기화
+                                                    </button>
+                                                    {u.uid !== currentUid && (
+                                                        <button className="btn" onClick={() => handleDelete(u.uid, u.email)}
+                                                            style={{fontSize:'0.72rem', padding:'0.3rem 0.6rem', background:'rgba(239,68,68,0.2)', border:'none'}}>
+                                                            삭제
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <div style={{marginTop:'0.75rem', fontSize:'0.75rem', color:'var(--text-muted)'}}>
+                                총 {users.length}명
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const AuthModal = ({ isOpen, onClose }) => {
     const [mode, setMode] = useState('login');
@@ -622,7 +835,10 @@ const App = () => {
     const [activeStock, setActiveStock] = useState(null);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [isAuthOpen, setIsAuthOpen] = useState(false);
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [isAdminOpen, setIsAdminOpen] = useState(false);
     const [user, setUser] = useState(null);
+    const [isAdmin, setIsAdmin] = useState(false);
     const [authLoading, setAuthLoading] = useState(true);
     const firestoreReady = useRef(false);
 
@@ -638,6 +854,7 @@ const App = () => {
         if (!user) {
             setFavorites([]);
             setActiveStock(null);
+            setIsAdmin(false);
             firestoreReady.current = false;
             return;
         }
@@ -650,6 +867,9 @@ const App = () => {
             }
             firestoreReady.current = true;
         });
+        user.getIdToken().then(token =>
+            fetch(`${BASE_URL.replace('/api','')}/api/admin/check`, { headers: { Authorization: `Bearer ${token}` } })
+        ).then(r => r.json()).then(d => setIsAdmin(d.is_admin)).catch(() => {});
     }, [user]);
 
     useEffect(() => {
@@ -698,13 +918,24 @@ const App = () => {
                     {user ? (
                         <>
                             <span style={{fontSize:'0.8rem', color:'var(--text-muted)'}}>{user.email}</span>
+                            {isAdmin && (
+                                <button className="btn" onClick={() => setIsAdminOpen(true)}
+                                    style={{background:'rgba(251,191,36,0.15)', border:'1px solid rgba(251,191,36,0.3)'}}>
+                                    <span className="material-symbols-outlined">admin_panel_settings</span>
+                                    관리자
+                                </button>
+                            )}
                             <button className="btn" onClick={() => setIsSearchOpen(true)}>
                                 <span className="material-symbols-outlined">star</span>
                                 종목 검색
                             </button>
-                            <button className="btn" onClick={handleLogout} style={{background:'transparent', border:'1px solid rgba(255,255,255,0.15)'}}>
+                            <button className="btn" onClick={() => setIsProfileOpen(true)}
+                                style={{background:'transparent', border:'1px solid rgba(255,255,255,0.15)'}}>
+                                <span className="material-symbols-outlined">manage_accounts</span>
+                            </button>
+                            <button className="btn" onClick={handleLogout}
+                                style={{background:'transparent', border:'1px solid rgba(255,255,255,0.15)'}}>
                                 <span className="material-symbols-outlined">logout</span>
-                                로그아웃
                             </button>
                         </>
                     ) : (
@@ -752,6 +983,16 @@ const App = () => {
             <AuthModal
                 isOpen={isAuthOpen}
                 onClose={() => setIsAuthOpen(false)}
+            />
+            <ProfileModal
+                isOpen={isProfileOpen}
+                onClose={() => setIsProfileOpen(false)}
+                user={user}
+            />
+            <AdminModal
+                isOpen={isAdminOpen}
+                onClose={() => setIsAdminOpen(false)}
+                currentUid={user?.uid}
             />
             <SearchModal
                 isOpen={isSearchOpen}
