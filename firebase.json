@@ -10,6 +10,11 @@
       ".gitignore",
       ".python-version",
       "test_news.py",
+      "test_digest_cron.py",
+      "docs/**",
+      ".venv/**",
+      "venv/**",
+      "env/**",
       "__pycache__/**",
       ".git/**",
       "*.pyc"
