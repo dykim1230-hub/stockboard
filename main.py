@@ -10,10 +10,14 @@ import xml.etree.ElementTree as ET
 import os
 import json
 import urllib.parse
+import html
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # ── Firebase Admin ─────────────────────────────────────────
 import firebase_admin
 from firebase_admin import credentials, auth as admin_auth
+from firebase_admin import firestore
 
 _admin_initialized = False
 
@@ -49,6 +53,11 @@ def _verify_admin(authorization: str) -> dict:
     if decoded["uid"] not in ADMIN_UIDS:
         raise HTTPException(status_code=403, detail="Forbidden")
     return decoded
+
+def _get_firestore_client():
+    if not _init_firebase_admin():
+        raise HTTPException(status_code=503, detail="Firebase Admin SDK not configured")
+    return firestore.client()
 
 app = FastAPI(title="Stock Dashboard API")
 
@@ -279,6 +288,164 @@ def _google_news_rss(stock_name: str, is_korean: bool) -> list:
         except Exception as e:
             print(f"Google News RSS error (attempt {attempt+1}) for '{stock_name}': {e}")
     return []
+
+
+# ── Email Digest ───────────────────────────────────────────
+
+def _format_digest_price(value, currency):
+    if value is None:
+        return "-"
+    if currency == "KRW":
+        return f"{round(value):,}원"
+    return f"${float(value):,.2f}"
+
+def _format_digest_change(value, pct, currency):
+    if value is None:
+        return "-"
+    prefix = "+" if value > 0 else ""
+    amount = _format_digest_price(abs(value), currency)
+    if currency != "KRW" and value < 0:
+        amount = amount.replace("$", "-$", 1)
+    elif currency == "KRW" and value < 0:
+        amount = f"-{amount}"
+    else:
+        amount = f"{prefix}{amount}"
+    return f"{amount} ({prefix}{float(pct or 0):.2f}%)"
+
+def _build_stock_digest(stock: dict) -> dict:
+    symbol = stock.get("symbol") or stock.get("1. symbol")
+    name = stock.get("name") or stock.get("2. name") or symbol
+    is_korean = stock.get("isKorean", stock.get("4. is_korean", True)) is not False
+    quote = get_quote(symbol) if symbol else None
+    news = _google_news_rss(name, is_korean)[:5] if symbol else []
+    return {
+        "symbol": symbol,
+        "name": name,
+        "quote": quote,
+        "news": news,
+    }
+
+def _build_digest_html(user_email: str, summaries: list, sent_at: datetime) -> str:
+    rows = []
+    for item in summaries:
+        quote = item.get("quote") or {}
+        currency = quote.get("11. currency") or "KRW"
+        price = _format_digest_price(quote.get("05. price"), currency)
+        change = _format_digest_change(quote.get("09. change"), quote.get("10. change percent"), currency)
+        news_items = item.get("news") or []
+        news_html = "".join(
+            f'<li style="margin:6px 0;"><a href="{html.escape(n.get("url", ""))}" style="color:#2563eb;text-decoration:none;">'
+            f'{html.escape(n.get("title", ""))}</a>'
+            f'<span style="color:#6b7280;"> - {html.escape(n.get("source", "Google News"))}</span></li>'
+            for n in news_items
+        ) or '<li style="color:#6b7280;">관련 뉴스가 없습니다.</li>'
+        rows.append(f"""
+        <section style="padding:18px 0;border-bottom:1px solid #e5e7eb;">
+          <h2 style="margin:0 0 8px;font-size:18px;color:#111827;">{html.escape(item.get("name") or "-")} <span style="color:#6b7280;font-size:13px;">{html.escape(item.get("symbol") or "")}</span></h2>
+          <div style="font-size:14px;color:#111827;">현재가: <strong>{price}</strong></div>
+          <div style="font-size:14px;color:#111827;margin-top:4px;">등락: <strong>{change}</strong></div>
+          <h3 style="margin:14px 0 6px;font-size:14px;color:#374151;">뉴스</h3>
+          <ol style="padding-left:20px;margin:0;font-size:13px;line-height:1.5;">{news_html}</ol>
+        </section>
+        """)
+    body = "".join(rows) or '<p style="color:#6b7280;">즐겨찾기 종목이 없습니다.</p>'
+    sent_label = sent_at.strftime("%Y-%m-%d %H:%M")
+    return f"""<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,'Apple SD Gothic Neo',sans-serif;">
+    <div style="max-width:680px;margin:0 auto;padding:24px;">
+      <div style="background:#ffffff;border-radius:10px;padding:28px;">
+        <h1 style="margin:0 0 6px;font-size:24px;color:#111827;">MarketPulse 일일 요약</h1>
+        <p style="margin:0 0 18px;font-size:13px;color:#6b7280;">{html.escape(user_email)} · {sent_label} Asia/Seoul</p>
+        {body}
+        <p style="margin:20px 0 0;font-size:12px;color:#6b7280;">메일 수신 설정은 MarketPulse 내 계정에서 변경할 수 있습니다.</p>
+      </div>
+    </div>
+  </body>
+</html>"""
+
+def _send_resend_email(to_email: str, subject: str, body_html: str):
+    api_key = os.environ.get("RESEND_API_KEY")
+    mail_from = os.environ.get("MAIL_FROM")
+    if not api_key or not mail_from:
+        raise RuntimeError("RESEND_API_KEY and MAIL_FROM are required")
+    res = requests.post(
+        "https://api.resend.com/emails",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={
+            "from": mail_from,
+            "to": [to_email],
+            "subject": subject,
+            "html": body_html,
+        },
+        timeout=20,
+    )
+    if res.status_code >= 400:
+        raise RuntimeError(f"Resend error {res.status_code}: {res.text}")
+    return res.json()
+
+def _run_digest_job(dry_run: bool = False) -> dict:
+    db = _get_firestore_client()
+    now = datetime.now(ZoneInfo("Asia/Seoul"))
+    today = now.strftime("%Y-%m-%d")
+    current_hour = now.hour
+    stats = {"checked": 0, "eligible": 0, "sent": 0, "skipped": 0, "failed": 0, "dry_run": dry_run}
+
+    for doc in db.collection("users").stream():
+        stats["checked"] += 1
+        data = doc.to_dict() or {}
+        digest = data.get("emailDigest") or {}
+        if not digest.get("enabled"):
+            stats["skipped"] += 1
+            continue
+        if int(digest.get("hour", -1)) != current_hour:
+            stats["skipped"] += 1
+            continue
+        if digest.get("lastSentDate") == today:
+            stats["skipped"] += 1
+            continue
+
+        email = data.get("email")
+        if not email:
+            try:
+                email = admin_auth.get_user(doc.id).email
+            except Exception:
+                email = None
+        favorites = (data.get("favorites") or [])[:7]
+        if not email or not favorites:
+            doc.reference.set({"emailDigest": {"lastError": "Missing email or favorites"}}, merge=True)
+            stats["failed"] += 1
+            continue
+
+        stats["eligible"] += 1
+        try:
+            summaries = [_build_stock_digest(stock) for stock in favorites]
+            body = _build_digest_html(email, summaries, now)
+            if not dry_run:
+                _send_resend_email(email, f"MarketPulse 일일 요약 - {today}", body)
+                doc.reference.set({
+                    "email": email,
+                    "emailDigest": {
+                        "lastSentDate": today,
+                        "lastSentAt": firestore.SERVER_TIMESTAMP,
+                        "lastError": None,
+                    }
+                }, merge=True)
+                stats["sent"] += 1
+        except Exception as e:
+            doc.reference.set({"emailDigest": {"lastError": str(e)}}, merge=True)
+            stats["failed"] += 1
+
+    return stats
+
+@app.post("/api/cron/digest")
+def run_digest_cron(x_cron_secret: str = Header(None), dry_run: bool = Query(False)):
+    cron_secret = os.environ.get("CRON_SECRET")
+    if not cron_secret:
+        raise HTTPException(status_code=503, detail="CRON_SECRET is not configured")
+    if x_cron_secret != cron_secret:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return _run_digest_job(dry_run=dry_run)
 
 
 # ── Admin API ──────────────────────────────────────────────

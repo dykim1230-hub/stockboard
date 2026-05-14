@@ -157,13 +157,29 @@ const ProfileModal = ({ isOpen, onClose, user }) => {
     const [curPw, setCurPw] = useState('');
     const [newPw, setNewPw] = useState('');
     const [confirmPw, setConfirmPw] = useState('');
+    const [digestEnabled, setDigestEnabled] = useState(false);
+    const [digestHour, setDigestHour] = useState(8);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        if (!isOpen) { setCurPw(''); setNewPw(''); setConfirmPw(''); setError(''); setSuccess(''); setTab('password'); }
-    }, [isOpen]);
+        if (!isOpen) {
+            setCurPw('');
+            setNewPw('');
+            setConfirmPw('');
+            setError('');
+            setSuccess('');
+            setTab('password');
+            return;
+        }
+        if (!user) return;
+        db.collection('users').doc(user.uid).get().then(doc => {
+            const saved = doc.exists ? doc.data().emailDigest : null;
+            setDigestEnabled(Boolean(saved?.enabled));
+            setDigestHour(Number.isInteger(saved?.hour) ? saved.hour : 8);
+        }).catch(() => {});
+    }, [isOpen, user]);
 
     const reauth = async (password) => {
         const credential = firebase.auth.EmailAuthProvider.credential(user.email, password);
@@ -201,10 +217,34 @@ const ProfileModal = ({ isOpen, onClose, user }) => {
         } finally { setLoading(false); }
     };
 
+    const handleDigestSave = async (e) => {
+        e.preventDefault();
+        setError('');
+        setSuccess('');
+        setLoading(true);
+        try {
+            await db.collection('users').doc(user.uid).set({
+                email: user.email,
+                emailDigest: {
+                    enabled: digestEnabled,
+                    hour: Number(digestHour),
+                    timezone: 'Asia/Seoul',
+                    maxNewsPerStock: 5,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                }
+            }, { merge: true });
+            setSuccess('메일 요약 설정이 저장되었습니다.');
+        } catch (err) {
+            setError('메일 요약 설정 저장에 실패했습니다.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     if (!isOpen || !user) return null;
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth:'420px'}}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth:'460px'}}>
                 <div className="modal-header">
                     <h2 className="modal-title">내 계정</h2>
                     <button className="close-btn" onClick={onClose}><span className="material-symbols-outlined">close</span></button>
@@ -212,10 +252,10 @@ const ProfileModal = ({ isOpen, onClose, user }) => {
                 <div className="modal-body">
                     <div style={{fontSize:'0.82rem', color:'var(--text-muted)', marginBottom:'1rem'}}>{user.email}</div>
                     <div style={{display:'flex', gap:'0.5rem', marginBottom:'1.25rem'}}>
-                        {['password','withdraw'].map(t => (
+                        {['password','digest','withdraw'].map(t => (
                             <button key={t} onClick={() => { setTab(t); setError(''); setSuccess(''); }}
                                 className="timeframe-btn" style={{flex:1, padding:'0.5rem', ...(tab===t ? {background:'var(--accent-color)', color:'#fff'} : {})}}>
-                                {t === 'password' ? '비밀번호 변경' : '회원 탈퇴'}
+                                {t === 'password' ? '비밀번호' : t === 'digest' ? '메일 요약' : '회원 탈퇴'}
                             </button>
                         ))}
                     </div>
@@ -232,6 +272,47 @@ const ProfileModal = ({ isOpen, onClose, user }) => {
                             {success && <div style={{color:'#10b981', fontSize:'0.85rem'}}>{success}</div>}
                             <button type="submit" className="btn" disabled={loading} style={{justifyContent:'center'}}>
                                 {loading ? '처리 중...' : '변경'}
+                            </button>
+                        </form>
+                    )}
+
+                    {tab === 'digest' && (
+                        <form onSubmit={handleDigestSave} style={{display:'flex', flexDirection:'column', gap:'1rem'}}>
+                            <label style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:'1rem', padding:'0.85rem', border:'1px solid rgba(255,255,255,0.12)', borderRadius:'8px'}}>
+                                <span>
+                                    <div style={{fontSize:'0.92rem', fontWeight:600}}>매일 메일 요약 받기</div>
+                                    <div style={{fontSize:'0.75rem', color:'var(--text-muted)', marginTop:'0.25rem'}}>
+                                        즐겨찾기 종목 전체와 종목당 뉴스 5개를 발송합니다.
+                                    </div>
+                                </span>
+                                <input
+                                    type="checkbox"
+                                    checked={digestEnabled}
+                                    onChange={e => setDigestEnabled(e.target.checked)}
+                                    style={{width:'18px', height:'18px', flexShrink:0}}
+                                />
+                            </label>
+                            <label style={{display:'flex', flexDirection:'column', gap:'0.45rem'}}>
+                                <span style={{fontSize:'0.82rem', color:'var(--text-muted)'}}>발송 시간</span>
+                                <select
+                                    className="search-input"
+                                    value={digestHour}
+                                    onChange={e => setDigestHour(Number(e.target.value))}
+                                    disabled={!digestEnabled}
+                                    style={{width:'100%'}}
+                                >
+                                    {Array.from({ length: 24 }, (_, hour) => (
+                                        <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>
+                                    ))}
+                                </select>
+                            </label>
+                            <div style={{fontSize:'0.75rem', color:'var(--text-muted)', lineHeight:1.5}}>
+                                선택한 시간에 하루 1회만 발송됩니다. 시간 기준은 Asia/Seoul입니다.
+                            </div>
+                            {error && <div style={{color:'#ef4444', fontSize:'0.85rem'}}>{error}</div>}
+                            {success && <div style={{color:'#10b981', fontSize:'0.85rem'}}>{success}</div>}
+                            <button type="submit" className="btn" disabled={loading} style={{justifyContent:'center'}}>
+                                {loading ? '저장 중...' : '설정 저장'}
                             </button>
                         </form>
                     )}
