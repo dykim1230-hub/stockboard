@@ -15,8 +15,10 @@
 | 회원별 메일 다이제스트 UI | 구현됨 |
 | 메일 다이제스트 백엔드 | 구현됨 |
 | Render Cron Job | 설정 및 실행 결과 확인 필요 |
-| Resend 실제 발송 | 검증 필요 |
+| Resend 설정 | dry run 기준 설정 확인됨 |
+| 실제 메일 발송 | 성공, 고객 메일 수신 확인됨 |
 | Cron 진단 응답 | 구현됨 |
+| 모바일 UI 최적화 | 1차 반영 및 배포됨 |
 
 ## 다음 작업 후보
 
@@ -26,21 +28,32 @@
    - `CRON_SECRET`
    - `FIREBASE_SERVICE_ACCOUNT`
    - `ADMIN_UIDS`
+   - 2026-05-15 dry run 기준 `RESEND_API_KEY`, `MAIL_FROM`은 설정된 것으로 확인됨
+   - 대화 중 기존 `CRON_SECRET`이 노출되어 교체했고, Render와 cron-job.org 양쪽 적용 후 성공 확인됨
 
 2. Render Cron Job 생성 또는 동작 확인
    - 매시 정각 `/api/cron/digest` 호출
    - `x-cron-secret` 헤더 포함
    - `dry_run=true`로 대상자 계산 검증
    - `include_details=true`로 제외 사유 확인
+   - 실제 스케줄러는 Render Cron Job이 아니라 cron-job.org 사용 중
+   - cron-job.org의 custom header `x-cron-secret` 값과 Render Web Service의 `CRON_SECRET` 값 일치 확인됨
 
 3. 실제 메일 발송 테스트
    - 테스트 사용자에서 `emailDigest.enabled=true`
    - 현재 Asia/Seoul hour와 사용자 설정 hour 일치
    - 하루 1회 중복 발송 방지 확인
+   - 2026-05-15 dry run 결과, 활성 사용자의 설정 시간이 `7시`라 현재 `17시`와 맞지 않아 발송 대상에서 제외됨
+   - 사용자가 발송 시간을 테스트 시간에 맞춘 뒤 실제 메일 발송 성공 및 고객 수신 확인됨
 
 4. 수신 해지/설정 변경 링크 설계
    - 메일 본문에서 계정 설정 화면으로 이동
    - 필요 시 unsubscribe 전용 토큰 방식 검토
+
+5. 모바일 UI 실기기 확인
+   - Firebase Hosting 배포 반영 후 모바일에서 레이아웃 확인
+   - 헤더 버튼, 즐겨찾기 카드, 차트, 뉴스 리스트, 모달 하단 시트 동작 확인
+   - 깨지는 화면이 있으면 스크린샷 기준으로 추가 조정
 
 ## 작업 시작 체크리스트
 
@@ -69,5 +82,5 @@
 | --- | --- |
 | 날짜 | 2026-05-15 |
 | 작성자 | Codex |
-| 내용 | 메일 다이제스트 미발송 원인 확인을 위해 cron 진단 응답을 추가했다. `dry_run=true&include_details=true`로 제외 사유와 Resend 설정 여부를 볼 수 있다. |
-| 다음 우선순위 | 배포 후 실제 `CRON_SECRET`으로 dry run 호출하여 `skip_reasons`, `resend_configured`, `eligible` 값을 확인 |
+| 내용 | 메일 다이제스트 기능의 dry run, secret 교체, cron-job.org 연동, 실제 발송 및 고객 수신 성공 내용을 문서화했다. |
+| 다음 우선순위 | 모바일 실기기 UI 확인, 메일 수신 해지/설정 변경 링크 설계, 운영 로그/audit 보강 |

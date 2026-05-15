@@ -69,3 +69,24 @@ Common skip reasons:
 | `already_sent_today` | Digest was already sent today |
 | `missing_email` | User document/Auth record has no email |
 | `missing_favorites` | User has no favorite stocks |
+
+## Production Verification
+
+Verified on 2026-05-15:
+
+| Item | Result |
+| --- | --- |
+| Scheduler | cron-job.org |
+| Backend | Render Web Service |
+| Auth header | `x-cron-secret` |
+| Dry run | Success after `CRON_SECRET` and cron-job.org header were synchronized |
+| Resend configuration | Present |
+| Actual delivery | Success |
+| Recipient confirmation | Customer confirmed mail receipt |
+
+If cron-job.org returns `403 Forbidden`, check that:
+
+1. Render Web Service `CRON_SECRET` was saved and deployed.
+2. cron-job.org custom header name is exactly `x-cron-secret`.
+3. cron-job.org custom header value exactly matches Render `CRON_SECRET`.
+4. There are no surrounding quotes, spaces, or line breaks in the header value.
