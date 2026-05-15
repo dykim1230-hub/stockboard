@@ -384,12 +384,49 @@ def _send_resend_email(to_email: str, subject: str, body_html: str):
         raise RuntimeError(f"Resend error {res.status_code}: {res.text}")
     return res.json()
 
-def _run_digest_job(dry_run: bool = False) -> dict:
+def _mask_email(email: str | None) -> str | None:
+    if not email or "@" not in email:
+        return email
+    local, domain = email.split("@", 1)
+    if len(local) <= 2:
+        return f"{local[0]}***@{domain}"
+    return f"{local[:2]}***@{domain}"
+
+def _parse_digest_hour(value) -> int | None:
+    try:
+        hour = int(value)
+    except (TypeError, ValueError):
+        return None
+    if 0 <= hour <= 23:
+        return hour
+    return None
+
+def _run_digest_job(dry_run: bool = False, include_details: bool = False) -> dict:
     db = _get_firestore_client()
     now = datetime.now(ZoneInfo("Asia/Seoul"))
     today = now.strftime("%Y-%m-%d")
     current_hour = now.hour
-    stats = {"checked": 0, "eligible": 0, "sent": 0, "skipped": 0, "failed": 0, "dry_run": dry_run}
+    stats = {
+        "checked": 0,
+        "eligible": 0,
+        "sent": 0,
+        "skipped": 0,
+        "failed": 0,
+        "dry_run": dry_run,
+        "date": today,
+        "current_hour": current_hour,
+        "resend_configured": bool(os.environ.get("RESEND_API_KEY") and os.environ.get("MAIL_FROM")),
+        "skip_reasons": {
+            "disabled": 0,
+            "invalid_hour": 0,
+            "hour_mismatch": 0,
+            "already_sent_today": 0,
+            "missing_email": 0,
+            "missing_favorites": 0,
+        },
+    }
+    if include_details:
+        stats["details"] = []
 
     for doc in db.collection("users").stream():
         stats["checked"] += 1
@@ -397,12 +434,26 @@ def _run_digest_job(dry_run: bool = False) -> dict:
         digest = data.get("emailDigest") or {}
         if not digest.get("enabled"):
             stats["skipped"] += 1
+            stats["skip_reasons"]["disabled"] += 1
             continue
-        if int(digest.get("hour", -1)) != current_hour:
+        digest_hour = _parse_digest_hour(digest.get("hour"))
+        if digest_hour is None:
             stats["skipped"] += 1
+            stats["skip_reasons"]["invalid_hour"] += 1
+            if include_details:
+                stats["details"].append({"uid": doc.id, "status": "skipped", "reason": "invalid_hour"})
+            continue
+        if digest_hour != current_hour:
+            stats["skipped"] += 1
+            stats["skip_reasons"]["hour_mismatch"] += 1
+            if include_details:
+                stats["details"].append({"uid": doc.id, "status": "skipped", "reason": "hour_mismatch", "configured_hour": digest_hour})
             continue
         if digest.get("lastSentDate") == today:
             stats["skipped"] += 1
+            stats["skip_reasons"]["already_sent_today"] += 1
+            if include_details:
+                stats["details"].append({"uid": doc.id, "status": "skipped", "reason": "already_sent_today"})
             continue
 
         email = data.get("email")
@@ -412,9 +463,17 @@ def _run_digest_job(dry_run: bool = False) -> dict:
             except Exception:
                 email = None
         favorites = (data.get("favorites") or [])[:7]
-        if not email or not favorites:
-            doc.reference.set({"emailDigest": {"lastError": "Missing email or favorites"}}, merge=True)
+        if not email:
+            doc.reference.set({"emailDigest": {"lastError": "Missing email"}}, merge=True)
+            stats["skip_reasons"]["missing_email"] += 1
             stats["failed"] += 1
+            continue
+        if not favorites:
+            doc.reference.set({"emailDigest": {"lastError": "Missing favorites"}}, merge=True)
+            stats["skip_reasons"]["missing_favorites"] += 1
+            stats["failed"] += 1
+            if include_details:
+                stats["details"].append({"uid": doc.id, "email": _mask_email(email), "status": "failed", "reason": "missing_favorites"})
             continue
 
         stats["eligible"] += 1
@@ -432,20 +491,33 @@ def _run_digest_job(dry_run: bool = False) -> dict:
                     }
                 }, merge=True)
                 stats["sent"] += 1
+            if include_details:
+                stats["details"].append({
+                    "uid": doc.id,
+                    "email": _mask_email(email),
+                    "status": "eligible" if dry_run else "sent",
+                    "favorites_count": len(favorites),
+                })
         except Exception as e:
             doc.reference.set({"emailDigest": {"lastError": str(e)}}, merge=True)
             stats["failed"] += 1
+            if include_details:
+                stats["details"].append({"uid": doc.id, "email": _mask_email(email), "status": "failed", "reason": str(e)})
 
     return stats
 
 @app.post("/api/cron/digest")
-def run_digest_cron(x_cron_secret: str = Header(None), dry_run: bool = Query(False)):
+def run_digest_cron(
+    x_cron_secret: str = Header(None),
+    dry_run: bool = Query(False),
+    include_details: bool = Query(False),
+):
     cron_secret = os.environ.get("CRON_SECRET")
     if not cron_secret:
         raise HTTPException(status_code=503, detail="CRON_SECRET is not configured")
     if x_cron_secret != cron_secret:
         raise HTTPException(status_code=403, detail="Forbidden")
-    return _run_digest_job(dry_run=dry_run)
+    return _run_digest_job(dry_run=dry_run, include_details=include_details)
 
 
 # ── Admin API ──────────────────────────────────────────────

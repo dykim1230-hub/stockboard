@@ -51,3 +51,21 @@ Use `dry_run=true` to count eligible users without sending email.
 curl -sS -X POST "https://stockboard-fhh4.onrender.com/api/cron/digest?dry_run=true" \
   -H "x-cron-secret: $CRON_SECRET"
 ```
+
+Use `include_details=true` when diagnosing delivery issues. The response includes the current Asia/Seoul hour, Resend configuration presence, skip reason counts, and masked eligible recipients.
+
+```bash
+curl -sS -X POST "https://stockboard-fhh4.onrender.com/api/cron/digest?dry_run=true&include_details=true" \
+  -H "x-cron-secret: $CRON_SECRET"
+```
+
+Common skip reasons:
+
+| Reason | Meaning |
+| --- | --- |
+| `disabled` | User has not enabled email digest |
+| `invalid_hour` | Saved hour is missing or outside 0-23 |
+| `hour_mismatch` | User selected a different hour from the current Asia/Seoul hour |
+| `already_sent_today` | Digest was already sent today |
+| `missing_email` | User document/Auth record has no email |
+| `missing_favorites` | User has no favorite stocks |
