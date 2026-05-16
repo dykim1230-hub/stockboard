@@ -601,80 +601,149 @@ body {
     overflow: hidden;
 }
 
-/* Market Overview */
+/* Market Overview Ticker */
 .market-overview {
-    padding: 1.25rem 1.5rem;
+    padding: 0;
     margin-bottom: 2rem;
+    overflow: hidden;
 }
 
 .market-overview-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem;
+    padding: 0.85rem 1.5rem 0.75rem;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .market-overview-title {
-    font-size: 0.9rem;
+    font-size: 0.72rem;
     font-weight: 600;
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    color: var(--text-secondary);
+    color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.8px;
 }
 
 .market-overview-title .material-symbols-outlined {
-    font-size: 1.1rem;
+    font-size: 0.95rem;
 }
 
 .market-updated {
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     color: var(--text-muted);
 }
 
-.market-grid {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 0.75rem;
+.market-ticker {
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
 }
 
-.market-card {
-    background: rgba(0, 0, 0, 0.15);
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    padding: 0.9rem 1rem;
-    text-align: center;
-    transition: border-color var(--transition-fast);
+.market-ticker::-webkit-scrollbar {
+    display: none;
 }
 
-.market-card:hover {
-    border-color: rgba(255, 255, 255, 0.2);
+.market-ticker-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0.9rem 1.5rem;
+    border-right: 1px solid var(--border-color);
+    white-space: nowrap;
+    flex: 1;
+    min-width: 115px;
+    gap: 0.2rem;
+    transition: background var(--transition-fast);
+    cursor: default;
 }
 
-.market-card-name {
-    font-size: 0.75rem;
+.market-ticker-item:last-child {
+    border-right: none;
+}
+
+.market-ticker-item:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.market-ticker-name {
+    font-size: 0.68rem;
     color: var(--text-muted);
-    font-weight: 500;
-    margin-bottom: 0.4rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
 }
 
-.market-card-price {
-    font-size: 1.05rem;
+.market-ticker-price {
+    font-size: 0.95rem;
     font-weight: 700;
     color: var(--text-primary);
-    margin-bottom: 0.3rem;
-    overflow-wrap: anywhere;
 }
 
-.market-card-change {
-    font-size: 0.8rem;
-    font-weight: 500;
+.market-ticker-change {
+    font-size: 0.72rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.05rem;
+}
+
+/* Login CTA */
+.login-cta {
+    padding: 3.5rem 2rem;
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.login-cta-icon {
+    width: 68px;
+    height: 68px;
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.1rem;
+    margin: 0 auto 1.25rem;
+}
+
+.login-cta-icon .material-symbols-outlined {
+    font-size: 2rem;
+    color: var(--accent-color);
+}
+
+.login-cta-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+}
+
+.login-cta-desc {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    line-height: 1.8;
+    margin-bottom: 1.75rem;
+    max-width: 420px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.login-cta-btn {
+    padding: 0.85rem 2.5rem !important;
+    font-size: 1rem !important;
+}
+
+/* Desktop 2-column layout */
+@media (min-width: 1024px) {
+    .main-grid {
+        grid-template-columns: 1.4fr 1fr;
+        align-items: start;
+    }
 }
 
 /* Mobile visibility helpers */
@@ -905,26 +974,20 @@ body {
     }
 
     .market-overview {
-        padding: 1rem;
         margin-bottom: 1.25rem;
     }
 
-    .market-grid {
-        display: flex;
-        gap: 0.6rem;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        padding-bottom: 0.25rem;
+    .market-overview-header {
+        padding: 0.7rem 1rem 0.6rem;
     }
 
-    .market-card {
-        min-width: 110px;
-        flex-shrink: 0;
-        padding: 0.75rem 0.85rem;
+    .market-ticker-item {
+        min-width: 95px;
+        padding: 0.7rem 0.9rem;
     }
 
-    .market-card-price {
-        font-size: 0.95rem;
+    .market-ticker-price {
+        font-size: 0.85rem;
     }
 
     .chart-section,

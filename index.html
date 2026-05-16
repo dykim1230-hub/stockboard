@@ -875,7 +875,7 @@ const NewsSection = ({ activeStock }) => {
     if (!activeStock) return null;
 
     return (
-        <div className="news-section">
+        <div className="glass-panel news-section">
             <h2 className="news-header">
                 <span className="material-symbols-outlined">newspaper</span>
                 {activeStock.name} 관련 최신 뉴스
@@ -920,10 +920,11 @@ const MarketOverview = () => {
         try {
             const res = await fetch(`${BASE_URL}/market`);
             const json = await res.json();
-            setData(json || []);
+            setData(Array.isArray(json) ? json : []);
             setUpdatedAt(new Date());
         } catch (e) {
             console.error('Market API error:', e);
+            setData([]);
         } finally {
             setLoading(false);
         }
@@ -955,18 +956,20 @@ const MarketOverview = () => {
                 )}
             </div>
             {loading ? (
-                <div className="spinner" style={{width:'24px', height:'24px', margin:'0.5rem auto', borderWidth:'2px'}}></div>
-            ) : (
-                <div className="market-grid">
+                <div style={{padding:'1.1rem', display:'flex', justifyContent:'center'}}>
+                    <div className="spinner" style={{width:'18px', height:'18px', margin:0, borderWidth:'2px'}}></div>
+                </div>
+            ) : data.length > 0 ? (
+                <div className="market-ticker">
                     {data.map(item => {
                         const pos = item.change > 0;
                         const neg = item.change < 0;
                         return (
-                            <div key={item.symbol} className="market-card">
-                                <div className="market-card-name">{item.name}</div>
-                                <div className="market-card-price">{fmtPrice(item)}</div>
-                                <div className={`market-card-change ${pos ? 'text-success' : neg ? 'text-danger' : 'text-neutral'}`}>
-                                    <span className="material-symbols-outlined" style={{fontSize:'1rem'}}>
+                            <div key={item.symbol} className="market-ticker-item">
+                                <div className="market-ticker-name">{item.name}</div>
+                                <div className="market-ticker-price">{fmtPrice(item)}</div>
+                                <div className={`market-ticker-change ${pos ? 'text-success' : neg ? 'text-danger' : 'text-neutral'}`}>
+                                    <span className="material-symbols-outlined" style={{fontSize:'0.9rem'}}>
                                         {pos ? 'arrow_drop_up' : neg ? 'arrow_drop_down' : 'remove'}
                                     </span>
                                     {item.change_pct >= 0 ? '+' : ''}{item.change_pct.toFixed(2)}%
@@ -975,7 +978,7 @@ const MarketOverview = () => {
                         );
                     })}
                 </div>
-            )}
+            ) : null}
         </div>
     );
 };
@@ -1200,11 +1203,16 @@ const App = () => {
             <MarketOverview />
 
             {!user ? (
-                <div className="glass-panel" style={{padding: '3rem', textAlign: 'center', marginBottom: '2rem', color: 'var(--text-muted)'}}>
-                    <span className="material-symbols-outlined" style={{fontSize:'3rem', display:'block', marginBottom:'1rem'}}>lock</span>
-                    로그인하면 즐겨찾기 종목을 저장하고 어디서든 확인할 수 있습니다.
-                    <br/>
-                    <button className="btn" onClick={() => setIsAuthOpen(true)} style={{marginTop:'1.5rem'}}>
+                <div className="glass-panel login-cta">
+                    <div className="login-cta-icon">
+                        <span className="material-symbols-outlined">monitoring</span>
+                    </div>
+                    <h2 className="login-cta-title">실시간 주식 대시보드</h2>
+                    <p className="login-cta-desc">
+                        관심 종목의 현재가·차트·뉴스를 한 화면에서 확인하세요.<br/>
+                        매일 원하는 시간에 이메일 요약을 받아볼 수 있습니다.
+                    </p>
+                    <button className="btn login-cta-btn" onClick={() => setIsAuthOpen(true)}>
                         <span className="material-symbols-outlined">login</span>
                         로그인 / 회원가입
                     </button>
