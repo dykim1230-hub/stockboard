@@ -356,9 +356,19 @@ def _build_digest_html(user_email: str, summaries: list, sent_at: datetime) -> s
     <div style="max-width:680px;margin:0 auto;padding:24px;">
       <div style="background:#ffffff;border-radius:10px;padding:28px;">
         <h1 style="margin:0 0 6px;font-size:24px;color:#111827;">MarketPulse 일일 요약</h1>
-        <p style="margin:0 0 18px;font-size:13px;color:#6b7280;">{html.escape(user_email)} · {sent_label} Asia/Seoul</p>
+        <p style="margin:0 0 14px;font-size:13px;color:#6b7280;">{html.escape(user_email)} · {sent_label} Asia/Seoul</p>
+        <a href="https://portfolio-4ffcf.web.app"
+           style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:11px 26px;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:20px;">
+          대시보드 바로가기 →
+        </a>
         {body}
-        <p style="margin:20px 0 0;font-size:12px;color:#6b7280;">메일 수신 설정은 MarketPulse 내 계정에서 변경할 수 있습니다.</p>
+        <div style="margin-top:24px;text-align:center;">
+          <a href="https://portfolio-4ffcf.web.app"
+             style="display:inline-block;background:#1e293b;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:600;">
+            📈 MarketPulse 열기
+          </a>
+        </div>
+        <p style="margin:16px 0 0;font-size:12px;color:#6b7280;text-align:center;">메일 수신 설정은 MarketPulse 내 계정에서 변경할 수 있습니다.</p>
       </div>
     </div>
   </body>

@@ -254,7 +254,7 @@ const ProfileModal = ({ isOpen, onClose, user }) => {
                     <div style={{display:'flex', gap:'0.5rem', marginBottom:'1.25rem'}}>
                         {['password','digest','withdraw'].map(t => (
                             <button key={t} onClick={() => { setTab(t); setError(''); setSuccess(''); }}
-                                className="timeframe-btn" style={{flex:1, padding:'0.5rem', ...(tab===t ? {background:'var(--accent-color)', color:'#fff'} : {})}}>
+                                className="timeframe-btn" style={{flex:1, padding:'0.5rem', fontSize:'0.8rem', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', ...(tab===t ? {background:'var(--accent-color)', color:'#fff'} : {})}}>
                                 {t === 'password' ? '비밀번호' : t === 'digest' ? '메일 요약' : '회원 탈퇴'}
                             </button>
                         ))}
@@ -819,7 +819,7 @@ const ChartSection = ({ activeStock }) => {
 
     if (!activeStock) {
         return (
-            <div className="glass-panel chart-section" style={{display:'flex', alignItems:'center', justifyContent:'center', height:'400px'}}>
+            <div className="glass-panel chart-section chart-placeholder">
                 <div className="empty-state">
                     <span className="material-symbols-outlined">show_chart</span>
                     <p>종목을 선택하면 차트가 표시됩니다.</p>
@@ -911,6 +911,94 @@ const NewsSection = ({ activeStock }) => {
     );
 };
 
+const CustomSelect = ({ options, value, onChange, placeholder = '종목 선택' }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const selected = options.find(o => o.value === value);
+
+    const handleSelect = (val) => {
+        onChange(val);
+        setIsOpen(false);
+    };
+
+    return (
+        <div className="custom-select">
+            <div className="custom-select-trigger" onClick={() => setIsOpen(v => !v)}>
+                <span className="custom-select-value">{selected?.label || placeholder}</span>
+                <span
+                    className="material-symbols-outlined custom-select-arrow"
+                    style={{transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)'}}
+                >expand_more</span>
+            </div>
+            {isOpen && (
+                <>
+                    <div className="custom-select-backdrop" onClick={() => setIsOpen(false)} />
+                    <div className="custom-select-dropdown">
+                        <div className="custom-select-handle" />
+                        <div className="custom-select-dropdown-header">즐겨찾기 종목</div>
+                        {options.map(opt => (
+                            <div
+                                key={opt.value}
+                                className={`custom-select-option ${opt.value === value ? 'selected' : ''}`}
+                                onClick={() => handleSelect(opt.value)}
+                            >
+                                <div>
+                                    <div className="custom-select-option-label">{opt.label}</div>
+                                    {opt.sub && <div className="custom-select-option-sub">{opt.sub}</div>}
+                                </div>
+                                {opt.value === value && (
+                                    <span className="material-symbols-outlined" style={{fontSize:'1.2rem', color:'var(--accent-color)', flexShrink:0}}>check_circle</span>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+};
+
+const MobilePriceCard = ({ stock }) => {
+    const [quote, setQuote] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!stock) return;
+        setLoading(true);
+        setQuote(null);
+        fetchQuote(stock.symbol).then(data => {
+            if (data && data['05. price'] !== undefined) setQuote(data);
+            setLoading(false);
+        });
+    }, [stock?.symbol]);
+
+    if (!stock) return null;
+
+    const currency = quote ? (quote['11. currency'] || stock.currency || 'USD') : (stock.currency || 'USD');
+    const rawPrice = quote ? quote['05. price'] : null;
+    const rawChange = quote ? quote['09. change'] : 0;
+    const changePct = quote ? quote['10. change percent'] : 0;
+    const isPositive = rawChange > 0;
+    const isNegative = rawChange < 0;
+
+    return (
+        <div className="glass-panel mobile-price-card">
+            {loading ? (
+                <div className="spinner" style={{width:'28px', height:'28px', margin:'0 auto', borderWidth:'2px'}}></div>
+            ) : (
+                <>
+                    <div className="mobile-price-value">{formatPrice(rawPrice, currency)}</div>
+                    <div className={`card-change ${isPositive ? 'text-success' : isNegative ? 'text-danger' : 'text-neutral'}`}>
+                        <span className="material-symbols-outlined" style={{fontSize:'1rem'}}>
+                            {isPositive ? 'trending_up' : isNegative ? 'trending_down' : 'remove'}
+                        </span>
+                        {formatPrice(rawChange, currency)} ({(changePct >= 0 ? '+' : '') + parseFloat(changePct).toFixed(2)}%)
+                    </div>
+                </>
+            )}
+        </div>
+    );
+};
+
 const App = () => {
     const [favorites, setFavorites] = useState([]);
     const [activeStock, setActiveStock] = useState(null);
@@ -921,6 +1009,8 @@ const App = () => {
     const [user, setUser] = useState(null);
     const [isAdmin, setIsAdmin] = useState(false);
     const [authLoading, setAuthLoading] = useState(true);
+    const [favLimitMsg, setFavLimitMsg] = useState(false);
+    const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 768px)').matches);
     const firestoreReady = useRef(false);
 
     useEffect(() => {
@@ -929,6 +1019,13 @@ const App = () => {
             setAuthLoading(false);
         });
         return unsubscribe;
+    }, []);
+
+    useEffect(() => {
+        const mq = window.matchMedia('(max-width: 768px)');
+        const handler = (e) => setIsMobile(e.matches);
+        mq.addEventListener('change', handler);
+        return () => mq.removeEventListener('change', handler);
     }, []);
 
     useEffect(() => {
@@ -969,7 +1066,8 @@ const App = () => {
                 return newFavs;
             } else {
                 if (prev.length >= 7) {
-                    alert("즐겨찾기는 최대 7개까지만 추가할 수 있습니다.");
+                    setFavLimitMsg(true);
+                    setTimeout(() => setFavLimitMsg(false), 3000);
                     return prev;
                 }
                 if (prev.length === 0) setActiveStock(stock);
@@ -1000,7 +1098,7 @@ const App = () => {
                         <>
                             <span style={{fontSize:'0.8rem', color:'var(--text-muted)'}}>{user.email}</span>
                             {isAdmin && (
-                                <button className="btn" onClick={() => setIsAdminOpen(true)}
+                                <button className="btn btn-admin" onClick={() => setIsAdminOpen(true)}
                                     style={{background:'rgba(251,191,36,0.15)', border:'1px solid rgba(251,191,36,0.3)'}}>
                                     <span className="material-symbols-outlined">admin_panel_settings</span>
                                     관리자
@@ -1013,10 +1111,12 @@ const App = () => {
                             <button className="btn" onClick={() => setIsProfileOpen(true)}
                                 style={{background:'transparent', border:'1px solid rgba(255,255,255,0.15)'}}>
                                 <span className="material-symbols-outlined">manage_accounts</span>
+                                <span className="mobile-btn-label">설정</span>
                             </button>
                             <button className="btn" onClick={handleLogout}
                                 style={{background:'transparent', border:'1px solid rgba(255,255,255,0.15)'}}>
                                 <span className="material-symbols-outlined">logout</span>
+                                <span className="mobile-btn-label">나가기</span>
                             </button>
                         </>
                     ) : (
@@ -1039,23 +1139,49 @@ const App = () => {
                     </button>
                 </div>
             ) : favorites.length > 0 ? (
-                <div className="favorites-container">
-                    {favorites.map(fav => (
-                        <FavoriteCard
-                            key={fav.symbol}
-                            favorite={fav}
-                            isActive={activeStock?.symbol === fav.symbol}
-                            onClick={setActiveStock}
-                            onToggle={toggleFavorite}
-                        />
-                    ))}
-                </div>
+                <>
+                    {!isMobile && (
+                        <div className="favorites-container">
+                            {favorites.map(fav => (
+                                <FavoriteCard
+                                    key={fav.symbol}
+                                    favorite={fav}
+                                    isActive={activeStock?.symbol === fav.symbol}
+                                    onClick={setActiveStock}
+                                    onToggle={toggleFavorite}
+                                />
+                            ))}
+                        </div>
+                    )}
+                    {isMobile && (
+                        <div className="mobile-stock-selector">
+                            <CustomSelect
+                                options={favorites.map(f => ({
+                                    value: f.symbol,
+                                    label: f.name,
+                                    sub: `${f.symbol} · ${f.currency === 'KRW' ? '🇰🇷 국내' : '🌐 해외'}`
+                                }))}
+                                value={activeStock?.symbol || ''}
+                                onChange={symbol => {
+                                    const fav = favorites.find(f => f.symbol === symbol);
+                                    if (fav) setActiveStock(fav);
+                                }}
+                            />
+                            <MobilePriceCard stock={activeStock} />
+                        </div>
+                    )}
+                </>
             ) : (
                 <div className="glass-panel" style={{padding: '2rem', textAlign: 'center', marginBottom: '2rem', color: 'var(--text-muted)'}}>
                     즐겨찾기된 종목이 없습니다. 우측 상단의 '종목 검색' 버튼을 눌러 추가해주세요.
                 </div>
             )}
 
+            {favLimitMsg && (
+                <div style={{padding:'0.65rem 1rem', background:'rgba(239,68,68,0.15)', border:'1px solid rgba(239,68,68,0.3)', borderRadius:'8px', color:'#ef4444', fontSize:'0.85rem', marginBottom:'1rem'}}>
+                    즐겨찾기는 최대 7개까지만 추가할 수 있습니다.
+                </div>
+            )}
             <div className="main-grid">
                 <ChartSection activeStock={activeStock} />
                 <NewsSection activeStock={activeStock} />
