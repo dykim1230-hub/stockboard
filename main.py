@@ -98,6 +98,50 @@ def get_krx_data():
 def is_korean_symbol(symbol: str) -> bool:
     return symbol.endswith('.KS') or symbol.endswith('.KQ')
 
+# ── 시장 지수 ─────────────────────────────────────────────
+MARKET_INDICES = [
+    {"symbol": "^GSPC",  "name": "S&P 500", "currency": "USD"},
+    {"symbol": "^IXIC",  "name": "NASDAQ",  "currency": "USD"},
+    {"symbol": "^KS11",  "name": "KOSPI",   "currency": "KRW"},
+    {"symbol": "^KQ11",  "name": "KOSDAQ",  "currency": "KRW"},
+    {"symbol": "KRW=X",  "name": "원/달러", "currency": "KRW"},
+]
+
+@app.get("/api/market")
+def get_market():
+    cache_key = "market:overview"
+    cached, hit = _get_cache(cache_key)
+    if hit:
+        return cached
+
+    result = []
+    for idx in MARKET_INDICES:
+        try:
+            fi = yf.Ticker(idx["symbol"]).fast_info
+            price = fi.last_price
+            prev = fi.previous_close
+            if price is None:
+                continue
+            price = float(price)
+            prev = float(prev or price)
+            change = price - prev
+            change_pct = (change / prev * 100) if prev else 0.0
+            result.append({
+                "symbol": idx["symbol"],
+                "name": idx["name"],
+                "price": price,
+                "change": change,
+                "change_pct": change_pct,
+                "currency": idx["currency"],
+            })
+        except Exception as e:
+            print(f"Market index error {idx['symbol']}: {e}")
+
+    if result:
+        _set_cache(cache_key, result, ttl=300)
+    return result
+
+
 # ── 검색 ──────────────────────────────────────────────────
 @app.get("/api/search")
 def search_stock(q: str = Query(...)):
