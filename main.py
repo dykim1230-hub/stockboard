@@ -652,8 +652,8 @@ def admin_list_users(authorization: str = Header(None)):
             users.append({
                 "uid": u.uid,
                 "email": u.email or "",
-                "last_sign_in": u.user_metadata.last_sign_in_time,
-                "created": u.user_metadata.creation_time,
+                "last_sign_in": u.user_metadata.last_sign_in_timestamp,
+                "created": u.user_metadata.creation_timestamp,
             })
         users.sort(key=lambda x: x["last_sign_in"] or 0, reverse=True)
         return users
