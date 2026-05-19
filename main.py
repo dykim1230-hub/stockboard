@@ -646,16 +646,20 @@ def admin_list_users(authorization: str = Header(None)):
     if not _init_firebase_admin():
         raise HTTPException(status_code=503, detail="Admin SDK not configured")
     _verify_admin(authorization)
-    users = []
-    for u in admin_auth.list_users().iterate_all():
-        users.append({
-            "uid": u.uid,
-            "email": u.email or "",
-            "last_sign_in": u.user_metadata.last_sign_in_time,
-            "created": u.user_metadata.creation_time,
-        })
-    users.sort(key=lambda x: x["last_sign_in"] or 0, reverse=True)
-    return users
+    try:
+        users = []
+        for u in admin_auth.list_users().iterate_all():
+            users.append({
+                "uid": u.uid,
+                "email": u.email or "",
+                "last_sign_in": u.user_metadata.last_sign_in_time,
+                "created": u.user_metadata.creation_time,
+            })
+        users.sort(key=lambda x: x["last_sign_in"] or 0, reverse=True)
+        return users
+    except Exception as e:
+        print(f"admin_list_users error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/admin/users/{uid}")
 def admin_delete_user(uid: str, authorization: str = Header(None)):

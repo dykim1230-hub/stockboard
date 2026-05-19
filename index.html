@@ -359,8 +359,8 @@ const AdminModal = ({ isOpen, onClose, currentUid }) => {
         if (!isOpen) { setMsg(''); return; }
         setLoading(true);
         adminFetch('/api/admin/users')
-            .then(data => setUsers(data))
-            .catch(() => setMsg('사용자 목록을 불러오지 못했습니다.'))
+            .then(data => setUsers(Array.isArray(data) ? data : []))
+            .catch(err => setMsg(`오류: ${err.message || '사용자 목록을 불러오지 못했습니다.'}`))
             .finally(() => setLoading(false));
     }, [isOpen]);
 
@@ -396,7 +396,7 @@ const AdminModal = ({ isOpen, onClose, currentUid }) => {
                     <button className="close-btn" onClick={onClose}><span className="material-symbols-outlined">close</span></button>
                 </div>
                 <div className="modal-body">
-                    {msg && <div style={{marginBottom:'0.75rem', fontSize:'0.85rem', color:'#10b981'}}>{msg}</div>}
+                    {msg && <div style={{marginBottom:'0.75rem', fontSize:'0.85rem', color: msg.startsWith('오류') ? '#ef4444' : '#10b981'}}>{msg}</div>}
                     {loading ? <div className="spinner"></div> : (
                         <div style={{overflowX:'auto'}}>
                             <table style={{width:'100%', borderCollapse:'collapse', fontSize:'0.82rem'}}>
