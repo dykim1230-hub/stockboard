@@ -14,6 +14,7 @@ import html
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from email.utils import parsedate_to_datetime
 
 # ── Firebase Admin ─────────────────────────────────────────
 import firebase_admin
@@ -345,6 +346,12 @@ def get_news(
     return result
 
 
+def _parse_pub_date(date_str: str) -> datetime:
+    try:
+        return parsedate_to_datetime(date_str)
+    except Exception:
+        return datetime.min.replace(tzinfo=ZoneInfo("UTC"))
+
 def _google_news_rss(stock_name: str, is_korean: bool) -> list:
     if is_korean:
         query = urllib.parse.quote(stock_name)
@@ -375,6 +382,7 @@ def _google_news_rss(stock_name: str, is_korean: bool) -> list:
                         "time_published": pub_date
                     })
             if articles:
+                articles.sort(key=lambda a: _parse_pub_date(a["time_published"]), reverse=True)
                 return articles
         except Exception as e:
             print(f"Google News RSS error (attempt {attempt+1}) for '{stock_name}': {e}")
