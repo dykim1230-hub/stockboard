@@ -11,6 +11,40 @@
 
 ## 로그
 
+### 2026-05-19 - 버그 수정 및 성능 개선
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Sonnet 4.6 |
+| 변경 파일 | `index.html`, `main.py`, `docs/ai-handoff.md`, `docs/ai-worklog.md` |
+| 작업 환경 | macOS, SSH 키 신규 설정 후 GitHub push |
+
+**1. 메일 다이제스트 미발송 원인 2건 수정**
+- Render 무료 티어 cold start 문제 → cron-job.org에 keepalive job 추가(`/api/market` 5분마다 GET). UptimeRobot 없이 cron-job.org만으로 서버 상시 기동 유지
+- cron-job.org의 digest job `Enable job` 토글이 꺼져 있었음 → 활성화
+
+**2. 초기 로딩 성능 개선**
+- React/ReactDOM 개발 빌드(5.6MB) → 프로덕션 빌드(1.2MB)로 교체
+- `/api/market` 백엔드: 지수 5개 순차 yfinance 조회 → `ThreadPoolExecutor` 병렬 조회
+- `/api/quotes` 배치 엔드포인트 신규 추가 — 즐겨찾기 종목 시세를 1회 호출로 일괄 조회
+- `FavoriteCard`, `MobilePriceCard`: 개별 quote 호출 제거 → 상위 App에서 배치 결과 prop으로 전달
+
+**3. 뉴스 최신순 정렬**
+- `_google_news_rss`: 기사 반환 전 `pubDate` 기준 내림차순 정렬 추가
+- `email.utils.parsedate_to_datetime` 사용, 파싱 실패 시 `datetime.min`으로 안전 처리
+
+**4. 관리자 회원 목록 미표시 버그 수정**
+- `admin_list_users`에서 `u.user_metadata.last_sign_in_time`, `creation_time` 사용 → Firebase Admin SDK 실제 속성명 `last_sign_in_timestamp`, `creation_timestamp`으로 수정
+- 예외 처리 추가 및 프론트 에러 메시지 실제 오류 내용 표시로 개선
+
+**5. GitHub SSH 인증 설정**
+- HTTPS 인증 만료로 push 불가 → ed25519 SSH 키 신규 생성, GitHub 등록, remote URL SSH로 변경
+
+| 확인 | 내용 |
+| --- | --- |
+| 배포 | Firebase Hosting 배포 완료, GitHub push → Render 자동 배포 |
+| 커밋 | `eb19e29`, `0cc0923`, `5882bc9`, `b7bccb2` |
+
 ### 2026-05-16 - UI 전면 개선 및 시장 현황 기능 추가
 
 | 항목 | 내용 |
