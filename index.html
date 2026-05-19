@@ -16,9 +16,9 @@
     <!-- Custom Styles -->
     <link rel="stylesheet" href="style.css">
 
-    <!-- React & ReactDOM (Development version for better errors) -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     
     <!-- Babel for JSX compilation in browser -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -77,6 +77,17 @@ const fetchQuote = async (symbol) => {
     } catch (e) {
         console.error("Quote API Error:", e);
         return null;
+    }
+};
+
+const fetchQuotes = async (symbols) => {
+    if (!symbols || symbols.length === 0) return {};
+    try {
+        const res = await fetch(`${BASE_URL}/quotes?symbols=${symbols.join(',')}`);
+        return await res.json();
+    } catch (e) {
+        console.error("Quotes batch API Error:", e);
+        return {};
     }
 };
 
@@ -635,21 +646,8 @@ const SearchModal = ({ isOpen, onClose, favorites, toggleFavorite }) => {
     );
 };
 
-const FavoriteCard = ({ favorite, isActive, onClick, onToggle }) => {
-    const [quote, setQuote] = useState(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        const loadQuote = async () => {
-            setLoading(true);
-            const data = await fetchQuote(favorite.symbol);
-            if (data && data['05. price'] !== undefined) {
-                setQuote(data);
-            }
-            setLoading(false);
-        };
-        loadQuote();
-    }, [favorite.symbol]);
+const FavoriteCard = ({ favorite, isActive, onClick, onToggle, quote, quotesLoading }) => {
+    const loading = quotesLoading;
 
     const currency = quote ? (quote['11. currency'] || favorite.currency || 'USD') : (favorite.currency || 'USD');
     const rawPrice = quote ? quote['05. price'] : null;
@@ -1029,19 +1027,8 @@ const CustomSelect = ({ options, value, onChange, placeholder = '종목 선택' 
     );
 };
 
-const MobilePriceCard = ({ stock }) => {
-    const [quote, setQuote] = useState(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        if (!stock) return;
-        setLoading(true);
-        setQuote(null);
-        fetchQuote(stock.symbol).then(data => {
-            if (data && data['05. price'] !== undefined) setQuote(data);
-            setLoading(false);
-        });
-    }, [stock?.symbol]);
+const MobilePriceCard = ({ stock, quote, quotesLoading }) => {
+    const loading = quotesLoading;
 
     if (!stock) return null;
 
@@ -1074,6 +1061,8 @@ const MobilePriceCard = ({ stock }) => {
 const App = () => {
     const [favorites, setFavorites] = useState([]);
     const [activeStock, setActiveStock] = useState(null);
+    const [quotes, setQuotes] = useState({});
+    const [quotesLoading, setQuotesLoading] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [isAuthOpen, setIsAuthOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -1126,6 +1115,15 @@ const App = () => {
         if (!user || !firestoreReady.current) return;
         db.collection('users').doc(user.uid).set({ favorites }, { merge: true });
     }, [favorites, user]);
+
+    useEffect(() => {
+        if (favorites.length === 0) { setQuotes({}); return; }
+        setQuotesLoading(true);
+        fetchQuotes(favorites.map(f => f.symbol)).then(data => {
+            setQuotes(data || {});
+            setQuotesLoading(false);
+        });
+    }, [favorites.map(f => f.symbol).join(',')]);
 
     const toggleFavorite = (stock) => {
         setFavorites(prev => {
@@ -1228,6 +1226,8 @@ const App = () => {
                                     isActive={activeStock?.symbol === fav.symbol}
                                     onClick={setActiveStock}
                                     onToggle={toggleFavorite}
+                                    quote={quotes[fav.symbol] || null}
+                                    quotesLoading={quotesLoading}
                                 />
                             ))}
                         </div>
@@ -1246,7 +1246,11 @@ const App = () => {
                                     if (fav) setActiveStock(fav);
                                 }}
                             />
-                            <MobilePriceCard stock={activeStock} />
+                            <MobilePriceCard
+                                stock={activeStock}
+                                quote={activeStock ? quotes[activeStock.symbol] || null : null}
+                                quotesLoading={quotesLoading}
+                            />
                         </div>
                     )}
                 </>

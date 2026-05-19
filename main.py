@@ -13,6 +13,7 @@ import urllib.parse
 import html
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ── Firebase Admin ─────────────────────────────────────────
 import firebase_admin
@@ -107,6 +108,25 @@ MARKET_INDICES = [
     {"symbol": "KRW=X",  "name": "원/달러", "currency": "KRW"},
 ]
 
+def _fetch_index(idx):
+    fi = yf.Ticker(idx["symbol"]).fast_info
+    price = fi.last_price
+    prev = fi.previous_close
+    if price is None:
+        return None
+    price = float(price)
+    prev = float(prev or price)
+    change = price - prev
+    change_pct = (change / prev * 100) if prev else 0.0
+    return {
+        "symbol": idx["symbol"],
+        "name": idx["name"],
+        "price": price,
+        "change": change,
+        "change_pct": change_pct,
+        "currency": idx["currency"],
+    }
+
 @app.get("/api/market")
 def get_market():
     cache_key = "market:overview"
@@ -115,28 +135,17 @@ def get_market():
         return cached
 
     result = []
-    for idx in MARKET_INDICES:
-        try:
-            fi = yf.Ticker(idx["symbol"]).fast_info
-            price = fi.last_price
-            prev = fi.previous_close
-            if price is None:
-                continue
-            price = float(price)
-            prev = float(prev or price)
-            change = price - prev
-            change_pct = (change / prev * 100) if prev else 0.0
-            result.append({
-                "symbol": idx["symbol"],
-                "name": idx["name"],
-                "price": price,
-                "change": change,
-                "change_pct": change_pct,
-                "currency": idx["currency"],
-            })
-        except Exception as e:
-            print(f"Market index error {idx['symbol']}: {e}")
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(_fetch_index, idx): idx for idx in MARKET_INDICES}
+        for future in as_completed(futures):
+            try:
+                item = future.result()
+                if item:
+                    result.append(item)
+            except Exception as e:
+                print(f"Market index error {futures[future]['symbol']}: {e}")
 
+    result.sort(key=lambda x: [i["symbol"] for i in MARKET_INDICES].index(x["symbol"]))
     if result:
         _set_cache(cache_key, result, ttl=300)
     return result
@@ -218,7 +227,45 @@ def search_stock(q: str = Query(...)):
     return result
 
 
-# ── 현재가 ────────────────────────────────────────────────
+# ── 현재가 (단건 + 배치) ──────────────────────────────────
+@app.get("/api/quotes")
+def get_quotes(symbols: str = Query(...)):
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()][:10]
+
+    def fetch_one(sym):
+        cached, hit = _get_cache(f"quote:{sym}")
+        if hit:
+            return sym, cached
+        try:
+            fi = yf.Ticker(sym).fast_info
+            price = fi.last_price
+            prev = fi.previous_close
+            if price is None:
+                return sym, None
+            prev = prev or price
+            price = float(price)
+            prev = float(prev)
+            change = price - prev
+            change_pct = (change / prev * 100) if prev else 0.0
+            currency = fi.currency or ("KRW" if is_korean_symbol(sym) else "USD")
+            result = {
+                "05. price": price,
+                "09. change": change,
+                "10. change percent": change_pct,
+                "11. currency": currency,
+            }
+            _set_cache(f"quote:{sym}", result, ttl=180)
+            return sym, result
+        except Exception as e:
+            print(f"Quote batch error for {sym}: {e}")
+            return sym, None
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=len(symbol_list)) as executor:
+        for sym, data in executor.map(fetch_one, symbol_list):
+            results[sym] = data
+    return results
+
 @app.get("/api/quote")
 def get_quote(symbol: str = Query(...)):
     cache_key = f"quote:{symbol}"
