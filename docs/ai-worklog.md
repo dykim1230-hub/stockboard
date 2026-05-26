@@ -11,6 +11,62 @@
 
 ## 로그
 
+### 2026-05-26 - 수신자별 뉴스레터 내용 불일치 버그 수정
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Sonnet 4.6 |
+| 변경 파일 | `main.py`, `docs/ai-handoff.md`, `docs/ai-worklog.md` |
+| 커밋 | `b589375` |
+
+**증상**
+- 동일 시간에 발송된 뉴스레터가 수신자에 따라 투자 의견·뉴스 요약이 있는 경우와 없는 경우로 나뉨
+
+**원인**
+- `_run_digest_job`이 사용자를 순차 처리하면서 각 사용자마다 `_gemini_stock_analysis` 호출
+- Gemini 무료 티어 RPM 제한으로 2번째 이후 사용자의 Gemini 호출이 rate limit에 걸려 빈 결과 반환
+- 오류가 조용히 폴백되어 투자 의견·뉴스 요약 없이 메일 발송
+
+**수정**
+- `_gemini_stock_analysis`: 429/quota/rate 에러 감지 시 30초·60초 대기 후 최대 2회 재시도
+- `_run_digest_job`: 2번째 사용자부터 Gemini 호출 전 10초 딜레이 추가 (예방적 조치)
+
+**검증**
+- 3명 강제 발송 → `sent: 3, failed: 0` 확인
+
+---
+
+### 2026-05-26 - 뉴스레터 AI 요약 기능 추가 및 구조 개편
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Sonnet 4.6 |
+| 변경 파일 | `main.py`, `requirements.txt`, `docs/ai-handoff.md`, `docs/ai-worklog.md` |
+| 커밋 | `00845be`, `2fee46e`, `c3d7f87`, `eec2259`, `0568052`, `62c595f` |
+
+**1. Gemini AI 뉴스 요약 기능 추가**
+- `google-genai` 패키지 추가 (구버전 `google-generativeai` 대신 신규 SDK 사용)
+- Render 환경변수에 `GEMINI_API_KEY` 추가 (Google AI Studio 신규 프로젝트로 발급)
+- 모델: `gemini-2.5-flash` (신규 계정은 `gemini-2.0-flash` 사용 불가)
+- `_gemini_stock_analysis()`: 종목별 투자 의견(5문장) + 기사별 뉴스 요약(4문장) 한 번에 생성
+
+**2. 뉴스레터 구조 전면 개편**
+- 기존: 일반 경제 헤드라인 섹션 + 종목별 시세/뉴스 링크 나열
+- 변경: 종목별로 `종목명·현재가·등락 → 투자 의견 → 뉴스 기사별 요약 → 링크` 구조
+- 종목명 바로 옆에 현재가·등락 한 줄 배치 (가독성 개선)
+- 투자 의견: 파란 박스, 소제목 구분
+- 뉴스 요약: 기사별 개별 요약, 소제목 구분
+
+**3. 강제 발송 기능 추가**
+- `POST /api/cron/digest?force=true` — 시간 불일치·중복 발송 체크 무시하고 전체 회원 즉시 발송
+- 기본값 `False`이므로 기존 cron 발송 동작에 영향 없음
+
+**결정 사항**
+- 일반 경제 헤드라인 섹션(`_fetch_headline_news`, `_gemini_summarize`, `_build_headline_section`) 코드는 보존하되 `_build_digest_html`에서 호출 제거. 추후 재활용 가능
+- 소스 다양성: 매일경제 RSS + Google News 경제 헤드라인 RSS 조합, 소스별 최대 2개 제한
+
+---
+
 ### 2026-05-19 - 버그 수정 및 성능 개선
 
 | 항목 | 내용 |
