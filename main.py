@@ -394,24 +394,54 @@ def _google_news_rss(stock_name: str, is_korean: bool) -> list:
 # ── Headline News & Gemini Summary ────────────────────────
 
 def _fetch_headline_news(limit: int = 5) -> list:
-    url = "https://www.mk.co.kr/rss/30100041/"
+    RSS_SOURCES = [
+        # 언론사명, URL, 최대 수집 수
+        ("매일경제", "https://www.mk.co.kr/rss/30100041/", 10),
+        ("Google뉴스", "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx6TVdZU0FtdHZHZ0pMVWlnQVAB?hl=ko&gl=KR&ceid=KR:ko", 20),
+    ]
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    try:
-        res = requests.get(url, headers=headers, timeout=10)
-        res.raise_for_status()
-        root = ET.fromstring(res.content)
-        news = []
-        for item in root.findall(".//item")[:limit]:
-            title = re.sub(r"<[^>]+>", "", item.findtext("title", "")).strip()
-            desc  = re.sub(r"<[^>]+>", "", item.findtext("description", "")).strip()
-            link  = item.findtext("link", "").strip()
-            pub   = item.findtext("pubDate", "").strip()
-            if title:
-                news.append({"title": title, "desc": desc, "link": link, "pub": pub})
-        return news
-    except Exception as e:
-        print(f"Headline news fetch error: {e}")
-        return []
+    candidates = []
+
+    for source_name, url, fetch_limit in RSS_SOURCES:
+        try:
+            res = requests.get(url, headers=headers, timeout=10)
+            res.raise_for_status()
+            root = ET.fromstring(res.content)
+            for item in root.findall(".//item")[:fetch_limit]:
+                title = re.sub(r"<[^>]+>", "", item.findtext("title", "")).strip()
+                desc  = re.sub(r"<[^>]+>", "", item.findtext("description", "")).strip()
+                link  = item.findtext("link", "").strip()
+                pub   = item.findtext("pubDate", "").strip()
+                # Google News RSS는 source 태그에 언론사명이 있음
+                source_el = item.find("source")
+                source = source_el.text.strip() if source_el is not None else source_name
+                # description이 제목과 동일한 경우(Google News 패턴) 비움
+                if desc and title and desc.startswith(title):
+                    desc = ""
+                if title:
+                    candidates.append({
+                        "title": title, "desc": desc,
+                        "link": link, "pub": pub, "source": source,
+                    })
+        except Exception as e:
+            print(f"Headline news fetch error ({source_name}): {e}")
+
+    # 소스별 최대 2개 제한 + 제목 앞 20자 기준 중복 제거
+    seen_titles, source_count, unique = set(), {}, []
+    for n in candidates:
+        title_key = n["title"][:20]
+        src = n.get("source", "")
+        if title_key in seen_titles:
+            continue
+        if source_count.get(src, 0) >= 2:
+            continue
+        seen_titles.add(title_key)
+        source_count[src] = source_count.get(src, 0) + 1
+        unique.append(n)
+        if len(unique) >= limit:
+            break
+
+    return unique
 
 
 def _gemini_summarize(news_items: list) -> list:
@@ -421,12 +451,15 @@ def _gemini_summarize(news_items: list) -> list:
     try:
         client = google_genai.Client(api_key=api_key)
         articles_text = "\n\n".join(
-            f"{i+1}. 제목: {n['title']}\n   내용: {n['desc']}"
+            f"{i+1}. 제목: {n['title']}"
+            + (f"\n   내용: {n['desc']}" if n.get('desc') else "")
+            + (f"\n   출처: {n['source']}" if n.get('source') else "")
             for i, n in enumerate(news_items)
         )
         prompt = (
-            "아래 경제 뉴스 기사 5개를 각각 3~4문장으로 요약해주세요.\n"
-            "독자가 기사를 읽지 않아도 핵심을 파악할 수 있도록 구체적으로 써주세요.\n"
+            "아래 한국 경제 뉴스 기사들을 각각 3~4문장으로 요약해주세요.\n"
+            "내용이 없는 기사는 제목과 배경 지식을 바탕으로 핵심을 유추해서 써주세요.\n"
+            "독자가 오늘의 주요 경제 동향을 빠르게 파악할 수 있도록 구체적으로 써주세요.\n"
             "형식: 반드시 JSON 배열로만 응답하세요. 다른 텍스트 없이.\n"
             '예시: ["요약1", "요약2", "요약3", "요약4", "요약5"]\n\n'
             f"기사 목록:\n{articles_text}"
@@ -486,12 +519,14 @@ def _build_headline_section(headline_news: list, summaries: list) -> str:
     items_html = ""
     for i, n in enumerate(headline_news):
         summary_text = summaries[i] if i < len(summaries) else n.get("desc", "")
+        source = n.get("source", "")
         items_html += f"""
         <div style="padding:14px 0;border-bottom:1px solid #f3f4f6;">
           <a href="{html.escape(n.get('link', ''))}"
              style="font-size:14px;font-weight:600;color:#111827;text-decoration:none;line-height:1.4;">
             {html.escape(n.get('title', ''))}
           </a>
+          {f'<span style="font-size:11px;color:#9ca3af;margin-left:6px;">{html.escape(source)}</span>' if source else ''}
           <p style="margin:6px 0 0;font-size:13px;color:#374151;line-height:1.7;">
             {html.escape(summary_text)}
           </p>
