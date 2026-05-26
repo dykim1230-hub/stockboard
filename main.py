@@ -598,7 +598,7 @@ def _parse_digest_hour(value) -> int | None:
         return hour
     return None
 
-def _run_digest_job(dry_run: bool = False, include_details: bool = False) -> dict:
+def _run_digest_job(dry_run: bool = False, include_details: bool = False, force: bool = False) -> dict:
     db = _get_firestore_client()
     now = datetime.now(ZoneInfo("Asia/Seoul"))
     today = now.strftime("%Y-%m-%d")
@@ -640,13 +640,13 @@ def _run_digest_job(dry_run: bool = False, include_details: bool = False) -> dic
             if include_details:
                 stats["details"].append({"uid": doc.id, "status": "skipped", "reason": "invalid_hour"})
             continue
-        if digest_hour != current_hour:
+        if not force and digest_hour != current_hour:
             stats["skipped"] += 1
             stats["skip_reasons"]["hour_mismatch"] += 1
             if include_details:
                 stats["details"].append({"uid": doc.id, "status": "skipped", "reason": "hour_mismatch", "configured_hour": digest_hour})
             continue
-        if digest.get("lastSentDate") == today:
+        if not force and digest.get("lastSentDate") == today:
             stats["skipped"] += 1
             stats["skip_reasons"]["already_sent_today"] += 1
             if include_details:
@@ -708,13 +708,14 @@ def run_digest_cron(
     x_cron_secret: str = Header(None),
     dry_run: bool = Query(False),
     include_details: bool = Query(False),
+    force: bool = Query(False),
 ):
     cron_secret = os.environ.get("CRON_SECRET")
     if not cron_secret:
         raise HTTPException(status_code=503, detail="CRON_SECRET is not configured")
     if x_cron_secret != cron_secret:
         raise HTTPException(status_code=403, detail="Forbidden")
-    return _run_digest_job(dry_run=dry_run, include_details=include_details)
+    return _run_digest_job(dry_run=dry_run, include_details=include_details, force=force)
 
 
 # ── Admin API ──────────────────────────────────────────────
