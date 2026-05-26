@@ -478,29 +478,35 @@ def _gemini_summarize(news_items: list) -> list:
     return []
 
 
-def _gemini_stock_comments(stock_summaries: list) -> list:
+def _gemini_stock_analysis(stock_summaries: list) -> list:
+    """종목별 투자 의견(1줄) + 기사별 개별 요약(2문장) 한 번에 생성.
+    반환: [{"comment": "...", "news_items": ["요약1", "요약2", ...]}, ...]
+    """
     api_key = os.environ.get("GEMINI_API_KEY")
+    empty = [{"comment": "", "news_items": []} for _ in stock_summaries]
     if not api_key or not stock_summaries:
-        return [""] * len(stock_summaries)
+        return empty
     try:
         client = google_genai.Client(api_key=api_key)
         stocks_text = ""
         for i, item in enumerate(stock_summaries):
             quote = item.get("quote") or {}
             change_pct = quote.get("10. change percent", "0")
-            news_titles = " / ".join(
-                n.get("title", "") for n in (item.get("news") or [])[:3]
-            ) or "관련 뉴스 없음"
+            news_list = "\n".join(
+                f"   {j+1}) {n.get('title', '')}"
+                for j, n in enumerate((item.get("news") or [])[:5])
+            ) or "   1) 관련 뉴스 없음"
             stocks_text += (
                 f"{i+1}. {item.get('name')} ({item.get('symbol')})\n"
                 f"   등락: {change_pct}\n"
-                f"   오늘 뉴스: {news_titles}\n\n"
+                f"   기사 목록:\n{news_list}\n\n"
             )
         prompt = (
-            f"아래 {len(stock_summaries)}개 종목에 대해 각각 투자 관점의 코멘트를 한 문장으로 작성해주세요.\n"
-            "등락률과 관련 뉴스를 고려해 오늘의 투자 포인트나 주의사항을 간결하게 써주세요.\n"
+            f"아래 {len(stock_summaries)}개 종목 각각에 대해 두 가지를 작성해주세요.\n"
+            "1. comment: 등락률과 뉴스를 종합해 투자자 관점에서 오늘의 상황을 분석하고 포인트·주의사항을 5문장으로 작성\n"
+            "2. news_items: 각 기사를 4문장으로 개별 요약한 배열 (기사 순서 그대로, 핵심 내용과 배경을 구체적으로)\n\n"
             "형식: 반드시 JSON 배열로만 응답하세요. 다른 텍스트 없이.\n"
-            '예시: ["코멘트1", "코멘트2"]\n\n'
+            '예시: [{"comment": "...", "news_items": ["기사1 요약", "기사2 요약"]}, ...]\n\n'
             f"종목 목록:\n{stocks_text}"
         )
         response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
@@ -509,8 +515,8 @@ def _gemini_stock_comments(stock_summaries: list) -> list:
         if match:
             return json.loads(match.group())[:len(stock_summaries)]
     except Exception as e:
-        print(f"Gemini stock comment error: {e}")
-    return [""] * len(stock_summaries)
+        print(f"Gemini stock analysis error: {e}")
+    return empty
 
 
 # ── Email Digest ───────────────────────────────────────────
@@ -577,13 +583,7 @@ def _build_headline_section(headline_news: list, summaries: list) -> str:
 
 
 def _build_digest_html(user_email: str, summaries: list, sent_at: datetime) -> str:
-    # 헤드라인 뉴스 수집 + Gemini 요약
-    headline_news = _fetch_headline_news(5)
-    gemini_summaries = _gemini_summarize(headline_news)
-    headline_section = _build_headline_section(headline_news, gemini_summaries)
-
-    # 즐겨찾기 종목별 AI 투자 코멘트
-    stock_comments = _gemini_stock_comments(summaries)
+    analyses = _gemini_stock_analysis(summaries)
 
     rows = []
     for i, item in enumerate(summaries):
@@ -591,29 +591,52 @@ def _build_digest_html(user_email: str, summaries: list, sent_at: datetime) -> s
         currency = quote.get("11. currency") or "KRW"
         price = _format_digest_price(quote.get("05. price"), currency)
         change = _format_digest_change(quote.get("09. change"), quote.get("10. change percent"), currency)
-        comment = stock_comments[i] if i < len(stock_comments) else ""
-        comment_html = (
-            f'<div style="margin:10px 0 0;padding:8px 12px;background:#f0f9ff;border-left:3px solid #2563eb;'
-            f'border-radius:0 6px 6px 0;font-size:13px;color:#1e40af;line-height:1.6;">'
-            f'📌 {html.escape(comment)}</div>'
-        ) if comment else ""
+        change_val = quote.get("09. change")
+        change_color = "#16a34a" if change_val and float(change_val) >= 0 else "#dc2626"
+
+        analysis = analyses[i] if i < len(analyses) else {}
+        comment = analysis.get("comment", "")
+        news_item_summaries = analysis.get("news_items", [])
+
+        comment_html = f"""
+          <div style="margin-top:14px;">
+            <div style="font-size:11px;font-weight:700;color:#6b7280;letter-spacing:0.05em;margin-bottom:6px;">투자 의견</div>
+            <div style="padding:10px 14px;background:#f0f9ff;border-left:3px solid #2563eb;border-radius:0 6px 6px 0;font-size:13px;color:#1e40af;line-height:1.7;">
+              📌 {html.escape(comment)}
+            </div>
+          </div>""" if comment else ""
+
         news_items = item.get("news") or []
-        news_html = "".join(
-            f'<li style="margin:6px 0;"><a href="{html.escape(n.get("url", ""))}" style="color:#2563eb;text-decoration:none;">'
-            f'{html.escape(n.get("title", ""))}</a>'
-            f'<span style="color:#6b7280;"> - {html.escape(n.get("source", "Google News"))}</span></li>'
-            for n in news_items
-        ) or '<li style="color:#6b7280;">관련 뉴스가 없습니다.</li>'
+        news_rows = ""
+        for j, n in enumerate(news_items):
+            summary = news_item_summaries[j] if j < len(news_item_summaries) else ""
+            news_rows += f"""
+            <div style="padding:10px 0;border-bottom:1px solid #f3f4f6;">
+              <a href="{html.escape(n.get('url', ''))}" style="font-size:13px;font-weight:600;color:#111827;text-decoration:none;line-height:1.5;">
+                → {html.escape(n.get('title', ''))}
+              </a>
+              <span style="font-size:11px;color:#9ca3af;margin-left:6px;">{html.escape(n.get('source', ''))}</span>
+              {f'<p style="margin:5px 0 0;font-size:12px;color:#4b5563;line-height:1.7;">{html.escape(summary)}</p>' if summary else ''}
+            </div>"""
+        news_section_html = f"""
+          <div style="margin-top:14px;">
+            <div style="font-size:11px;font-weight:700;color:#6b7280;letter-spacing:0.05em;margin-bottom:6px;">뉴스 요약</div>
+            {news_rows or '<div style="font-size:12px;color:#9ca3af;">관련 뉴스가 없습니다.</div>'}
+          </div>""" if news_items else ""
+
         rows.append(f"""
-        <section style="padding:18px 0;border-bottom:1px solid #e5e7eb;">
-          <h2 style="margin:0 0 8px;font-size:18px;color:#111827;">{html.escape(item.get("name") or "-")} <span style="color:#6b7280;font-size:13px;">{html.escape(item.get("symbol") or "")}</span></h2>
-          <div style="font-size:14px;color:#111827;">현재가: <strong>{price}</strong></div>
-          <div style="font-size:14px;color:#111827;margin-top:4px;">등락: <strong>{change}</strong></div>
+        <section style="padding:20px 0;border-bottom:1px solid #e5e7eb;">
+          <div style="display:flex;align-items:baseline;flex-wrap:wrap;gap:8px;">
+            <span style="font-size:17px;font-weight:700;color:#111827;">{html.escape(item.get("name") or "-")}</span>
+            <span style="font-size:12px;color:#9ca3af;">{html.escape(item.get("symbol") or "")}</span>
+            <span style="font-size:15px;font-weight:700;color:#111827;margin-left:4px;">{price}</span>
+            <span style="font-size:13px;font-weight:600;color:{change_color};">{change}</span>
+          </div>
           {comment_html}
-          <h3 style="margin:14px 0 6px;font-size:14px;color:#374151;">뉴스</h3>
-          <ol style="padding-left:20px;margin:0;font-size:13px;line-height:1.5;">{news_html}</ol>
+          {news_section_html}
         </section>
         """)
+
     body = "".join(rows) or '<p style="color:#6b7280;">즐겨찾기 종목이 없습니다.</p>'
     sent_label = sent_at.strftime("%Y-%m-%d %H:%M")
     return f"""<!doctype html>
@@ -627,7 +650,6 @@ def _build_digest_html(user_email: str, summaries: list, sent_at: datetime) -> s
            style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:11px 26px;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:20px;">
           대시보드 바로가기 →
         </a>
-        {headline_section}
         {body}
         <div style="margin-top:24px;text-align:center;">
           <a href="https://portfolio-4ffcf.web.app"
