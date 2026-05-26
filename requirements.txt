@@ -8,3 +8,4 @@ pandas
 lxml
 firebase-admin
 httpx
+google-genai

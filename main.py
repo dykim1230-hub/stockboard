@@ -15,6 +15,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.utils import parsedate_to_datetime
+import re
+from google import genai as google_genai
 
 # ── Firebase Admin ─────────────────────────────────────────
 import firebase_admin
@@ -389,6 +391,60 @@ def _google_news_rss(stock_name: str, is_korean: bool) -> list:
     return []
 
 
+# ── Headline News & Gemini Summary ────────────────────────
+
+def _fetch_headline_news(limit: int = 5) -> list:
+    url = "https://www.mk.co.kr/rss/30100041/"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    try:
+        res = requests.get(url, headers=headers, timeout=10)
+        res.raise_for_status()
+        root = ET.fromstring(res.content)
+        news = []
+        for item in root.findall(".//item")[:limit]:
+            title = re.sub(r"<[^>]+>", "", item.findtext("title", "")).strip()
+            desc  = re.sub(r"<[^>]+>", "", item.findtext("description", "")).strip()
+            link  = item.findtext("link", "").strip()
+            pub   = item.findtext("pubDate", "").strip()
+            if title:
+                news.append({"title": title, "desc": desc, "link": link, "pub": pub})
+        return news
+    except Exception as e:
+        print(f"Headline news fetch error: {e}")
+        return []
+
+
+def _gemini_summarize(news_items: list) -> list:
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key or not news_items:
+        return []
+    try:
+        client = google_genai.Client(api_key=api_key)
+        articles_text = "\n\n".join(
+            f"{i+1}. 제목: {n['title']}\n   내용: {n['desc']}"
+            for i, n in enumerate(news_items)
+        )
+        prompt = (
+            "아래 경제 뉴스 기사 5개를 각각 3~4문장으로 요약해주세요.\n"
+            "독자가 기사를 읽지 않아도 핵심을 파악할 수 있도록 구체적으로 써주세요.\n"
+            "형식: 반드시 JSON 배열로만 응답하세요. 다른 텍스트 없이.\n"
+            '예시: ["요약1", "요약2", "요약3", "요약4", "요약5"]\n\n'
+            f"기사 목록:\n{articles_text}"
+        )
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+        )
+        text = response.text.strip()
+        match = re.search(r"\[.*\]", text, re.DOTALL)
+        if match:
+            summaries = json.loads(match.group())
+            return summaries[:len(news_items)]
+    except Exception as e:
+        print(f"Gemini summarize error: {e}")
+    return []
+
+
 # ── Email Digest ───────────────────────────────────────────
 
 def _format_digest_price(value, currency):
@@ -424,7 +480,38 @@ def _build_stock_digest(stock: dict) -> dict:
         "news": news,
     }
 
+def _build_headline_section(headline_news: list, summaries: list) -> str:
+    if not headline_news:
+        return ""
+    items_html = ""
+    for i, n in enumerate(headline_news):
+        summary_text = summaries[i] if i < len(summaries) else n.get("desc", "")
+        items_html += f"""
+        <div style="padding:14px 0;border-bottom:1px solid #f3f4f6;">
+          <a href="{html.escape(n.get('link', ''))}"
+             style="font-size:14px;font-weight:600;color:#111827;text-decoration:none;line-height:1.4;">
+            {html.escape(n.get('title', ''))}
+          </a>
+          <p style="margin:6px 0 0;font-size:13px;color:#374151;line-height:1.7;">
+            {html.escape(summary_text)}
+          </p>
+        </div>"""
+    return f"""
+        <section style="padding:18px 0;border-bottom:2px solid #e5e7eb;margin-bottom:4px;">
+          <h2 style="margin:0 0 4px;font-size:16px;color:#111827;font-weight:700;">
+            오늘의 주요 경제 뉴스
+          </h2>
+          <p style="margin:0 0 12px;font-size:12px;color:#9ca3af;">매일경제 · AI 요약</p>
+          {items_html}
+        </section>"""
+
+
 def _build_digest_html(user_email: str, summaries: list, sent_at: datetime) -> str:
+    # 헤드라인 뉴스 수집 + Gemini 요약
+    headline_news = _fetch_headline_news(5)
+    gemini_summaries = _gemini_summarize(headline_news)
+    headline_section = _build_headline_section(headline_news, gemini_summaries)
+
     rows = []
     for item in summaries:
         quote = item.get("quote") or {}
@@ -460,6 +547,7 @@ def _build_digest_html(user_email: str, summaries: list, sent_at: datetime) -> s
            style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:11px 26px;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:20px;">
           대시보드 바로가기 →
         </a>
+        {headline_section}
         {body}
         <div style="margin-top:24px;text-align:center;">
           <a href="https://portfolio-4ffcf.web.app"
