@@ -486,36 +486,46 @@ def _gemini_stock_analysis(stock_summaries: list) -> list:
     empty = [{"comment": "", "news_items": []} for _ in stock_summaries]
     if not api_key or not stock_summaries:
         return empty
-    try:
-        client = google_genai.Client(api_key=api_key)
-        stocks_text = ""
-        for i, item in enumerate(stock_summaries):
-            quote = item.get("quote") or {}
-            change_pct = quote.get("10. change percent", "0")
-            news_list = "\n".join(
-                f"   {j+1}) {n.get('title', '')}"
-                for j, n in enumerate((item.get("news") or [])[:5])
-            ) or "   1) 관련 뉴스 없음"
-            stocks_text += (
-                f"{i+1}. {item.get('name')} ({item.get('symbol')})\n"
-                f"   등락: {change_pct}\n"
-                f"   기사 목록:\n{news_list}\n\n"
-            )
-        prompt = (
-            f"아래 {len(stock_summaries)}개 종목 각각에 대해 두 가지를 작성해주세요.\n"
-            "1. comment: 등락률과 뉴스를 종합해 투자자 관점에서 오늘의 상황을 분석하고 포인트·주의사항을 5문장으로 작성\n"
-            "2. news_items: 각 기사를 4문장으로 개별 요약한 배열 (기사 순서 그대로, 핵심 내용과 배경을 구체적으로)\n\n"
-            "형식: 반드시 JSON 배열로만 응답하세요. 다른 텍스트 없이.\n"
-            '예시: [{"comment": "...", "news_items": ["기사1 요약", "기사2 요약"]}, ...]\n\n'
-            f"종목 목록:\n{stocks_text}"
+
+    client = google_genai.Client(api_key=api_key)
+    stocks_text = ""
+    for i, item in enumerate(stock_summaries):
+        quote = item.get("quote") or {}
+        change_pct = quote.get("10. change percent", "0")
+        news_list = "\n".join(
+            f"   {j+1}) {n.get('title', '')}"
+            for j, n in enumerate((item.get("news") or [])[:5])
+        ) or "   1) 관련 뉴스 없음"
+        stocks_text += (
+            f"{i+1}. {item.get('name')} ({item.get('symbol')})\n"
+            f"   등락: {change_pct}\n"
+            f"   기사 목록:\n{news_list}\n\n"
         )
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-        text = response.text.strip()
-        match = re.search(r"\[.*\]", text, re.DOTALL)
-        if match:
-            return json.loads(match.group())[:len(stock_summaries)]
-    except Exception as e:
-        print(f"Gemini stock analysis error: {e}")
+    prompt = (
+        f"아래 {len(stock_summaries)}개 종목 각각에 대해 두 가지를 작성해주세요.\n"
+        "1. comment: 등락률과 뉴스를 종합해 투자자 관점에서 오늘의 상황을 분석하고 포인트·주의사항을 5문장으로 작성\n"
+        "2. news_items: 각 기사를 4문장으로 개별 요약한 배열 (기사 순서 그대로, 핵심 내용과 배경을 구체적으로)\n\n"
+        "형식: 반드시 JSON 배열로만 응답하세요. 다른 텍스트 없이.\n"
+        '예시: [{"comment": "...", "news_items": ["기사1 요약", "기사2 요약"]}, ...]\n\n'
+        f"종목 목록:\n{stocks_text}"
+    )
+
+    for attempt in range(3):
+        try:
+            response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+            text = response.text.strip()
+            match = re.search(r"\[.*\]", text, re.DOTALL)
+            if match:
+                return json.loads(match.group())[:len(stock_summaries)]
+            return empty
+        except Exception as e:
+            err_str = str(e)
+            is_rate_limit = "429" in err_str or "quota" in err_str.lower() or "rate" in err_str.lower()
+            print(f"Gemini stock analysis error (attempt {attempt+1}): {e}")
+            if is_rate_limit and attempt < 2:
+                time.sleep(30 * (attempt + 1))
+                continue
+            break
     return empty
 
 
@@ -776,6 +786,9 @@ def _run_digest_job(dry_run: bool = False, include_details: bool = False, force:
             continue
 
         stats["eligible"] += 1
+        # 연속 Gemini 호출 시 rate limit 방지: 첫 번째 사용자 이후 10초 대기
+        if stats["eligible"] > 1:
+            time.sleep(10)
         try:
             summaries = [_build_stock_digest(stock) for stock in favorites]
             body = _build_digest_html(email, summaries, now)
