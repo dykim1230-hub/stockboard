@@ -478,6 +478,41 @@ def _gemini_summarize(news_items: list) -> list:
     return []
 
 
+def _gemini_stock_comments(stock_summaries: list) -> list:
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key or not stock_summaries:
+        return [""] * len(stock_summaries)
+    try:
+        client = google_genai.Client(api_key=api_key)
+        stocks_text = ""
+        for i, item in enumerate(stock_summaries):
+            quote = item.get("quote") or {}
+            change_pct = quote.get("10. change percent", "0")
+            news_titles = " / ".join(
+                n.get("title", "") for n in (item.get("news") or [])[:3]
+            ) or "관련 뉴스 없음"
+            stocks_text += (
+                f"{i+1}. {item.get('name')} ({item.get('symbol')})\n"
+                f"   등락: {change_pct}\n"
+                f"   오늘 뉴스: {news_titles}\n\n"
+            )
+        prompt = (
+            f"아래 {len(stock_summaries)}개 종목에 대해 각각 투자 관점의 코멘트를 한 문장으로 작성해주세요.\n"
+            "등락률과 관련 뉴스를 고려해 오늘의 투자 포인트나 주의사항을 간결하게 써주세요.\n"
+            "형식: 반드시 JSON 배열로만 응답하세요. 다른 텍스트 없이.\n"
+            '예시: ["코멘트1", "코멘트2"]\n\n'
+            f"종목 목록:\n{stocks_text}"
+        )
+        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        text = response.text.strip()
+        match = re.search(r"\[.*\]", text, re.DOTALL)
+        if match:
+            return json.loads(match.group())[:len(stock_summaries)]
+    except Exception as e:
+        print(f"Gemini stock comment error: {e}")
+    return [""] * len(stock_summaries)
+
+
 # ── Email Digest ───────────────────────────────────────────
 
 def _format_digest_price(value, currency):
@@ -547,12 +582,21 @@ def _build_digest_html(user_email: str, summaries: list, sent_at: datetime) -> s
     gemini_summaries = _gemini_summarize(headline_news)
     headline_section = _build_headline_section(headline_news, gemini_summaries)
 
+    # 즐겨찾기 종목별 AI 투자 코멘트
+    stock_comments = _gemini_stock_comments(summaries)
+
     rows = []
-    for item in summaries:
+    for i, item in enumerate(summaries):
         quote = item.get("quote") or {}
         currency = quote.get("11. currency") or "KRW"
         price = _format_digest_price(quote.get("05. price"), currency)
         change = _format_digest_change(quote.get("09. change"), quote.get("10. change percent"), currency)
+        comment = stock_comments[i] if i < len(stock_comments) else ""
+        comment_html = (
+            f'<div style="margin:10px 0 0;padding:8px 12px;background:#f0f9ff;border-left:3px solid #2563eb;'
+            f'border-radius:0 6px 6px 0;font-size:13px;color:#1e40af;line-height:1.6;">'
+            f'📌 {html.escape(comment)}</div>'
+        ) if comment else ""
         news_items = item.get("news") or []
         news_html = "".join(
             f'<li style="margin:6px 0;"><a href="{html.escape(n.get("url", ""))}" style="color:#2563eb;text-decoration:none;">'
@@ -565,6 +609,7 @@ def _build_digest_html(user_email: str, summaries: list, sent_at: datetime) -> s
           <h2 style="margin:0 0 8px;font-size:18px;color:#111827;">{html.escape(item.get("name") or "-")} <span style="color:#6b7280;font-size:13px;">{html.escape(item.get("symbol") or "")}</span></h2>
           <div style="font-size:14px;color:#111827;">현재가: <strong>{price}</strong></div>
           <div style="font-size:14px;color:#111827;margin-top:4px;">등락: <strong>{change}</strong></div>
+          {comment_html}
           <h3 style="margin:14px 0 6px;font-size:14px;color:#374151;">뉴스</h3>
           <ol style="padding-left:20px;margin:0;font-size:13px;line-height:1.5;">{news_html}</ol>
         </section>
