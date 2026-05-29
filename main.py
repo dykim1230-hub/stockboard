@@ -468,11 +468,12 @@ def _gemini_summarize(news_items: list) -> list:
             model="gemini-2.5-flash",
             contents=prompt,
         )
-        text = response.text.strip()
+        text = (response.text or "").strip()
         match = re.search(r"\[.*\]", text, re.DOTALL)
         if match:
             summaries = json.loads(match.group())
             return summaries[:len(news_items)]
+        print(f"Gemini summarize: no JSON array found. text[:200]={text[:200]}")
     except Exception as e:
         print(f"Gemini summarize error: {e}")
     return []
@@ -513,11 +514,28 @@ def _gemini_stock_analysis(stock_summaries: list) -> list:
     for attempt in range(3):
         try:
             response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-            text = response.text.strip()
+            text = (response.text or "").strip()
+            if not text:
+                print(f"Gemini stock analysis: empty response (attempt {attempt+1})")
+                if attempt < 2:
+                    time.sleep(5)
+                    continue
+                break
             match = re.search(r"\[.*\]", text, re.DOTALL)
-            if match:
+            if not match:
+                print(f"Gemini stock analysis: no JSON array found (attempt {attempt+1}): {text[:200]}")
+                if attempt < 2:
+                    time.sleep(5)
+                    continue
+                break
+            try:
                 return json.loads(match.group())[:len(stock_summaries)]
-            return empty
+            except json.JSONDecodeError as je:
+                print(f"Gemini stock analysis JSON parse error (attempt {attempt+1}): {je}")
+                if attempt < 2:
+                    time.sleep(5)
+                    continue
+                break
         except Exception as e:
             err_str = str(e)
             is_rate_limit = "429" in err_str or "quota" in err_str.lower() or "rate" in err_str.lower()
