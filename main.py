@@ -444,6 +444,23 @@ def _fetch_headline_news(limit: int = 5) -> list:
     return unique
 
 
+def _extract_gemini_text(response) -> str:
+    """gemini-2.5-flash thinking 모델은 response.text가 ValueError를 던질 수 있음.
+    thinking part를 제외한 text part만 직접 추출한다."""
+    try:
+        return response.text or ""
+    except (ValueError, AttributeError):
+        pass
+    try:
+        parts = response.candidates[0].content.parts
+        return "".join(
+            p.text for p in parts
+            if hasattr(p, "text") and not getattr(p, "thought", False)
+        )
+    except Exception:
+        return ""
+
+
 def _gemini_summarize(news_items: list) -> list:
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key or not news_items:
@@ -468,7 +485,7 @@ def _gemini_summarize(news_items: list) -> list:
             model="gemini-2.5-flash",
             contents=prompt,
         )
-        text = (response.text or "").strip()
+        text = _extract_gemini_text(response).strip()
         match = re.search(r"\[.*\]", text, re.DOTALL)
         if match:
             summaries = json.loads(match.group())
@@ -514,7 +531,7 @@ def _gemini_stock_analysis(stock_summaries: list) -> list:
     for attempt in range(3):
         try:
             response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-            text = (response.text or "").strip()
+            text = _extract_gemini_text(response).strip()
             if not text:
                 print(f"Gemini stock analysis: empty response (attempt {attempt+1})")
                 if attempt < 2:
@@ -538,9 +555,12 @@ def _gemini_stock_analysis(stock_summaries: list) -> list:
                 break
         except Exception as e:
             err_str = str(e)
-            is_rate_limit = "429" in err_str or "quota" in err_str.lower() or "rate" in err_str.lower()
+            is_retryable = (
+                "429" in err_str or "quota" in err_str.lower() or "rate" in err_str.lower()
+                or "503" in err_str or "unavailable" in err_str.lower() or "overloaded" in err_str.lower()
+            )
             print(f"Gemini stock analysis error (attempt {attempt+1}): {e}")
-            if is_rate_limit and attempt < 2:
+            if is_retryable and attempt < 2:
                 time.sleep(30 * (attempt + 1))
                 continue
             break
