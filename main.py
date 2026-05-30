@@ -461,6 +461,21 @@ def _extract_gemini_text(response) -> str:
         return ""
 
 
+def _parse_first_json_array(text: str):
+    """텍스트에서 첫 번째 완전한 JSON 배열만 파싱한다.
+    응답 뒤에 설명 텍스트가 붙어도 Extra data 에러 없이 배열만 반환한다."""
+    idx = text.find('[')
+    if idx == -1:
+        return None
+    try:
+        result, _ = json.JSONDecoder().raw_decode(text, idx)
+        if isinstance(result, list):
+            return result
+    except json.JSONDecodeError:
+        pass
+    return None
+
+
 def _gemini_summarize(news_items: list) -> list:
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key or not news_items:
@@ -486,9 +501,8 @@ def _gemini_summarize(news_items: list) -> list:
             contents=prompt,
         )
         text = _extract_gemini_text(response).strip()
-        match = re.search(r"\[.*\]", text, re.DOTALL)
-        if match:
-            summaries = json.loads(match.group())
+        summaries = _parse_first_json_array(text)
+        if summaries is not None:
             return summaries[:len(news_items)]
         print(f"Gemini summarize: no JSON array found. text[:200]={text[:200]}")
     except Exception as e:
@@ -538,21 +552,14 @@ def _gemini_stock_analysis(stock_summaries: list) -> list:
                     time.sleep(5)
                     continue
                 break
-            match = re.search(r"\[.*\]", text, re.DOTALL)
-            if not match:
+            result = _parse_first_json_array(text)
+            if result is None:
                 print(f"Gemini stock analysis: no JSON array found (attempt {attempt+1}): {text[:200]}")
                 if attempt < 2:
                     time.sleep(5)
                     continue
                 break
-            try:
-                return json.loads(match.group())[:len(stock_summaries)]
-            except json.JSONDecodeError as je:
-                print(f"Gemini stock analysis JSON parse error (attempt {attempt+1}): {je}")
-                if attempt < 2:
-                    time.sleep(5)
-                    continue
-                break
+            return result[:len(stock_summaries)]
         except Exception as e:
             err_str = str(e)
             is_retryable = (
