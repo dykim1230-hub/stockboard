@@ -40,11 +40,11 @@ check_http "뉴스       /api/news"    "$BASE_URL/api/news?stock_name=Apple&symb
 echo ""
 echo "[2/3] 보안"
 
-# 소스 코드 내 키 패턴 감지
-if git ls-files | xargs grep -lE "(AIza[0-9A-Za-z_-]{35}|sk-[A-Za-z0-9]{40,}|re_[A-Za-z0-9]{32,})" 2>/dev/null | grep -q .; then
-  red "소스 코드에 API 키 패턴 감지 — 확인 필요"
+# 서버 시크릿 키 패턴 감지 (.py 파일만 — Firebase 공개키 등 오탐 방지)
+if git ls-files "*.py" | xargs grep -lE "(sk-[A-Za-z0-9]{40,}|re_[A-Za-z0-9]{32,})" 2>/dev/null | grep -q .; then
+  red "Python 소스에 서버 시크릿 키 패턴 감지 — 확인 필요"
 else
-  green "소스 코드 키 하드코딩 없음"
+  green "Python 소스 키 하드코딩 없음"
 fi
 
 # .env가 git에 추적되는지 확인
