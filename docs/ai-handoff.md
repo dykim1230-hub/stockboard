@@ -56,9 +56,18 @@
 ## 작업 종료 체크리스트
 
 - [ ] 변경한 파일을 요약했다.
-- [ ] 테스트 또는 확인 명령 결과를 기록했다.
+- [ ] **배포 후 `docs/deploy-checklist.md`를 따라 점검했다.**
 - [ ] 다음 작업자가 이어받을 내용을 이 파일에 갱신했다.
 - [ ] 중요한 결정사항은 `docs/ai-worklog.md`에 추가했다.
+
+## 배포 후 점검 방법
+
+```bash
+export CRON_SECRET=your_secret
+bash scripts/post-deploy.sh
+```
+
+자동 점검 후 `docs/deploy-checklist.md`의 수동 항목(UI, 메일)을 이어서 확인한다.
 
 ## 주의사항
 
