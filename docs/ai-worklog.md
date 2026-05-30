@@ -11,6 +11,32 @@
 
 ## 로그
 
+### 2026-05-30 - Gemini JSON 파싱 오류 수정 및 배포 자동 점검 체계 구축
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Sonnet 4.6 |
+| 변경 파일 | `main.py`, `scripts/post-deploy.sh`, `docs/deploy-checklist.md`, `docs/ai-handoff.md` |
+| 커밋 | `672c4ef`, `526cb77`, `b910dea` |
+
+**1. Gemini JSON 파싱 오류 수정**
+- 증상: 뉴스레터에 투자 의견·뉴스 요약 섹션 누락
+- 원인: 503 × 2회 재시도 후 3번째 시도에서 응답은 받았으나 `re.search(r"\[.*\]", text, re.DOTALL)` greedy 매칭이 JSON 배열 뒤 설명 텍스트까지 포함 → `json.loads` Extra data 에러
+- 수정: `_parse_first_json_array` 헬퍼 추가 — `json.JSONDecoder().raw_decode()`로 첫 번째 완전한 JSON 배열만 파싱, 나머지 무시
+- 적용: `_gemini_stock_analysis`, `_gemini_summarize` 두 곳 모두 교체
+
+**2. 배포 후 자동 점검 체계 구축**
+- `scripts/post-deploy.sh`: API 엔드포인트 5개, 서버 시크릿 하드코딩 여부, `.env` git 추적 여부, Digest dry-run 자동 점검
+- `docs/deploy-checklist.md`: 자동/수동 점검 항목 통합 체크리스트 (AI 에이전트 기준 포함)
+- `docs/ai-handoff.md`: 작업 종료 체크리스트에 배포 점검 항목 추가
+- 보안 점검 오탐 수정: Firebase Web SDK `apiKey`는 공개키라 정상. `.py` 파일만 서버 시크릿 검사하도록 변경
+
+**3. 점검 결과**
+- `bash scripts/post-deploy.sh`: 8/8 전부 통과
+- 강제 발송(`?force=true`): checked=3, sent=3, failed=0 — 3명 전원 정상 수신 확인
+
+---
+
 ### 2026-05-26 - 수신자별 뉴스레터 내용 불일치 버그 수정
 
 | 항목 | 내용 |

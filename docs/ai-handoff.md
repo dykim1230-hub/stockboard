@@ -27,6 +27,8 @@
 | 뉴스레터 구조 개편 | 완료 (2026-05-26) — 종목명 옆 가격, 투자 의견/뉴스 요약 소제목 구분 |
 | 강제 발송 기능 | 완료 (2026-05-26) — /api/cron/digest?force=true 파라미터 추가 |
 | 수신자별 뉴스레터 내용 불일치 버그 수정 | 완료 (2026-05-26) — Gemini rate limit으로 인한 내용 누락 수정 |
+| Gemini JSON 파싱 오류 수정 | 완료 (2026-05-30) — greedy 정규식 → raw_decode 교체, Extra data 에러 방지 |
+| 배포 자동 점검 체계 | 완료 (2026-05-30) — scripts/post-deploy.sh, docs/deploy-checklist.md 추가 |
 
 ## 다음 작업 후보
 
@@ -80,8 +82,8 @@ bash scripts/post-deploy.sh
 
 | 항목 | 내용 |
 | --- | --- |
-| 날짜 | 2026-05-26 |
+| 날짜 | 2026-05-30 |
 | 작성자 | Claude Sonnet 4.6 |
-| 작업 환경 | macOS. 백엔드는 push → Render 자동배포. |
-| 내용 | Gemini rate limit으로 인한 수신자별 뉴스레터 내용 불일치 버그 수정. `_gemini_stock_analysis` 재시도 로직 추가, 사용자 간 10초 딜레이 추가. 3명 전원 정상 발송 확인. |
+| 작업 환경 | Windows 11. 백엔드는 push → Render 자동배포. |
+| 내용 | Gemini JSON 파싱 오류 수정(greedy 정규식 → raw_decode), 배포 자동 점검 체계 구축(post-deploy.sh, deploy-checklist.md). 강제 발송 3명 전원 정상 확인. |
 | 다음 우선순위 | 차트 기술 지표 추가(MA/볼린저밴드), PWA 전환, 수신 해지 링크 추가 |
