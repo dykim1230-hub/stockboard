@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from fastapi import FastAPI, Query, Header, HTTPException
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import yfinance as yf
 import requests
@@ -16,6 +17,8 @@ from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.utils import parsedate_to_datetime
 import re
+import hmac
+import hashlib
 from google import genai as google_genai
 
 # ── Firebase Admin ─────────────────────────────────────────
@@ -640,7 +643,7 @@ def _build_headline_section(headline_news: list, summaries: list) -> str:
         </section>"""
 
 
-def _build_digest_html(user_email: str, summaries: list, sent_at: datetime) -> str:
+def _build_digest_html(user_email: str, summaries: list, sent_at: datetime, uid: str = "") -> str:
     analyses = _gemini_stock_analysis(summaries)
 
     rows = []
@@ -715,7 +718,10 @@ def _build_digest_html(user_email: str, summaries: list, sent_at: datetime) -> s
             📈 MarketPulse 열기
           </a>
         </div>
-        <p style="margin:16px 0 0;font-size:12px;color:#6b7280;text-align:center;">메일 수신 설정은 MarketPulse 내 계정에서 변경할 수 있습니다.</p>
+        <p style="margin:16px 0 0;font-size:12px;color:#6b7280;text-align:center;">
+          메일 수신 설정은 MarketPulse 내 계정에서 변경할 수 있습니다.
+          {f'&nbsp;·&nbsp;<a href="https://stockboard-fhh4.onrender.com/api/unsubscribe?uid={urllib.parse.quote(uid)}&token={_generate_unsubscribe_token(uid)}" style="color:#9ca3af;">수신 해지</a>' if uid else ''}
+        </p>
       </div>
     </div>
   </body>
@@ -748,6 +754,11 @@ def _mask_email(email: str | None) -> str | None:
     if len(local) <= 2:
         return f"{local[0]}***@{domain}"
     return f"{local[:2]}***@{domain}"
+
+def _generate_unsubscribe_token(uid: str) -> str:
+    secret = os.environ.get("CRON_SECRET", "")
+    return hmac.new(secret.encode(), uid.encode(), hashlib.sha256).hexdigest()
+
 
 def _parse_digest_hour(value) -> int | None:
     try:
@@ -839,7 +850,7 @@ def _run_digest_job(dry_run: bool = False, include_details: bool = False, force:
             time.sleep(10)
         try:
             summaries = [_build_stock_digest(stock) for stock in favorites]
-            body = _build_digest_html(email, summaries, now)
+            body = _build_digest_html(email, summaries, now, doc.id)
             if not dry_run:
                 _send_resend_email(email, f"MarketPulse 일일 요약 - {today}", body)
                 doc.reference.set({
@@ -865,6 +876,51 @@ def _run_digest_job(dry_run: bool = False, include_details: bool = False, force:
                 stats["details"].append({"uid": doc.id, "email": _mask_email(email), "status": "failed", "reason": str(e)})
 
     return stats
+
+@app.get("/api/unsubscribe", response_class=HTMLResponse)
+def unsubscribe(uid: str = Query(...), token: str = Query(...)):
+    expected = _generate_unsubscribe_token(uid)
+    if not hmac.compare_digest(expected, token):
+        return HTMLResponse(
+            "<html><body style='font-family:sans-serif;text-align:center;padding:60px'>"
+            "<h2>유효하지 않은 링크입니다.</h2>"
+            "<p>링크가 만료되었거나 올바르지 않습니다.</p>"
+            "</body></html>",
+            status_code=400,
+        )
+    if not _init_firebase_admin():
+        return HTMLResponse(
+            "<html><body style='font-family:sans-serif;text-align:center;padding:60px'>"
+            "<h2>처리 중 오류가 발생했습니다.</h2><p>잠시 후 다시 시도해 주세요.</p>"
+            "</body></html>",
+            status_code=503,
+        )
+    try:
+        db = _get_firestore_client()
+        db.collection("users").document(uid).set(
+            {"emailDigest": {"enabled": False}}, merge=True
+        )
+    except Exception as e:
+        return HTMLResponse(
+            "<html><body style='font-family:sans-serif;text-align:center;padding:60px'>"
+            f"<h2>처리 중 오류가 발생했습니다.</h2><p>{html.escape(str(e))}</p>"
+            "</body></html>",
+            status_code=500,
+        )
+    return HTMLResponse(
+        "<html><body style='font-family:sans-serif;text-align:center;padding:60px;"
+        "background:#f3f4f6'>"
+        "<div style='max-width:480px;margin:0 auto;background:#fff;border-radius:10px;"
+        "padding:40px;box-shadow:0 1px 4px rgba(0,0,0,.08)'>"
+        "<h2 style='color:#111827'>수신 해지 완료</h2>"
+        "<p style='color:#6b7280'>MarketPulse 뉴스레터 수신이 해지되었습니다.<br>"
+        "설정은 언제든지 MarketPulse 계정에서 다시 변경할 수 있습니다.</p>"
+        "<a href='https://portfolio-4ffcf.web.app' style='display:inline-block;"
+        "margin-top:20px;background:#2563eb;color:#fff;text-decoration:none;"
+        "padding:10px 24px;border-radius:8px;font-size:14px'>MarketPulse 홈으로</a>"
+        "</div></body></html>"
+    )
+
 
 @app.post("/api/cron/digest")
 def run_digest_cron(
