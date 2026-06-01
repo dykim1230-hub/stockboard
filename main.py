@@ -363,7 +363,7 @@ def get_analysis(
         return cached
 
     stock_summary = _build_stock_digest({"symbol": symbol, "name": name or symbol, "isKorean": is_korean})
-    results = _gemini_stock_analysis([stock_summary])
+    results = _gemini_stock_analysis([stock_summary], model="gemini-1.5-flash")
     result = results[0] if results else {"comment": "", "news_items": []}
     if result.get("comment"):
         _set_cache(cache_key, result, ttl=1800)
@@ -532,7 +532,7 @@ def _gemini_summarize(news_items: list) -> list:
     return []
 
 
-def _gemini_stock_analysis(stock_summaries: list) -> list:
+def _gemini_stock_analysis(stock_summaries: list, model: str = "gemini-2.5-flash") -> list:
     """종목별 투자 의견(1줄) + 기사별 개별 요약(2문장) 한 번에 생성.
     반환: [{"comment": "...", "news_items": ["요약1", "요약2", ...]}, ...]
     """
@@ -564,24 +564,25 @@ def _gemini_stock_analysis(stock_summaries: list) -> list:
         f"종목 목록:\n{stocks_text}"
     )
 
-    # 0~1번: gemini-2.5-flash, 2번 이후: gemini-1.5-flash 폴백
+    # 0~1번: 지정 모델, 2번 이후: gemini-1.5-flash 폴백
+    fallback_model = "gemini-1.5-flash"
     max_attempts = 5
     for attempt in range(max_attempts):
-        model = "gemini-2.5-flash" if attempt < 2 else "gemini-1.5-flash"
-        if attempt == 2:
-            print("Gemini stock analysis: switching to gemini-1.5-flash fallback")
+        current_model = model if attempt < 2 else fallback_model
+        if attempt == 2 and model != fallback_model:
+            print(f"Gemini stock analysis: switching to {fallback_model} fallback")
         try:
-            response = client.models.generate_content(model=model, contents=prompt)
+            response = client.models.generate_content(model=current_model, contents=prompt)
             text = _extract_gemini_text(response).strip()
             if not text:
-                print(f"Gemini stock analysis: empty response (attempt {attempt+1}, model={model})")
+                print(f"Gemini stock analysis: empty response (attempt {attempt+1}, model={current_model})")
                 if attempt < max_attempts - 1:
                     time.sleep(5)
                     continue
                 break
             result = _parse_first_json_array(text)
             if result is None:
-                print(f"Gemini stock analysis: no JSON array found (attempt {attempt+1}, model={model}): {text[:200]}")
+                print(f"Gemini stock analysis: no JSON array found (attempt {attempt+1}, model={current_model}): {text[:200]}")
                 if attempt < max_attempts - 1:
                     time.sleep(5)
                     continue
@@ -593,7 +594,7 @@ def _gemini_stock_analysis(stock_summaries: list) -> list:
                 "429" in err_str or "quota" in err_str.lower() or "rate" in err_str.lower()
                 or "503" in err_str or "unavailable" in err_str.lower() or "overloaded" in err_str.lower()
             )
-            print(f"Gemini stock analysis error (attempt {attempt+1}, model={model}): {e}")
+            print(f"Gemini stock analysis error (attempt {attempt+1}, model={current_model}): {e}")
             if is_retryable and attempt < max_attempts - 1:
                 # 모델 전환 시 짧게 대기, 같은 모델 재시도 시 지수 백오프
                 wait = 10 if attempt == 1 else min(30 * (2 ** max(0, attempt - 2)), 60)
