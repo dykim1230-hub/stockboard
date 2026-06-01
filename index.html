@@ -150,6 +150,17 @@ const formatTooltip = (val, currency) => {
     return '$' + val.toFixed(2);
 };
 
+// --- Auth API helpers ---
+const authFetch = async (path, options = {}) => {
+    const token = await auth.currentUser.getIdToken();
+    const res = await fetch(`${BASE_URL}${path}`, {
+        ...options,
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', ...(options.headers || {}) }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+};
+
 // --- Admin API helpers ---
 const adminFetch = async (path, options = {}) => {
     const token = await auth.currentUser.getIdToken();
@@ -715,7 +726,7 @@ const FavoriteCard = ({ favorite, isActive, onClick, onToggle, quote, quotesLoad
     );
 };
 
-const ChartSection = ({ activeStock }) => {
+const ChartSection = ({ activeStock, user, quote }) => {
     const chartRef = useRef(null);
     const chartInstance = useRef(null);
     const [timeframe, setTimeframe] = useState('1M');
@@ -723,6 +734,44 @@ const ChartSection = ({ activeStock }) => {
     const [loading, setLoading] = useState(false);
     const [analysis, setAnalysis] = useState(null);
     const [analysisLoading, setAnalysisLoading] = useState(false);
+    const [showAlert, setShowAlert] = useState(false);
+    const [alertCondition, setAlertCondition] = useState('above');
+    const [alertTargetPrice, setAlertTargetPrice] = useState('');
+    const [existingAlert, setExistingAlert] = useState(null);
+    const [alertMsg, setAlertMsg] = useState('');
+
+    useEffect(() => {
+        setShowAlert(false);
+        setAlertMsg('');
+        if (!activeStock || !user) { setExistingAlert(null); return; }
+        authFetch('/alerts').then(alerts => {
+            const found = (alerts || []).find(a => a.symbol === activeStock.symbol);
+            setExistingAlert(found || null);
+            if (found) { setAlertCondition(found.condition); setAlertTargetPrice(String(found.targetPrice)); }
+            else { setAlertCondition('above'); setAlertTargetPrice(''); }
+        }).catch(() => setExistingAlert(null));
+    }, [activeStock?.symbol, user?.uid]);
+
+    const handleSaveAlert = async () => {
+        if (!alertTargetPrice) return;
+        try {
+            await authFetch('/alerts', { method: 'POST', body: JSON.stringify({
+                symbol: activeStock.symbol, name: activeStock.name,
+                currency: activeStock.currency || 'KRW',
+                isKorean: activeStock.isKorean !== false,
+                targetPrice: parseFloat(alertTargetPrice), condition: alertCondition,
+            })});
+            setExistingAlert({ symbol: activeStock.symbol, targetPrice: parseFloat(alertTargetPrice), condition: alertCondition });
+            setAlertMsg('알림이 설정되었습니다.');
+        } catch { setAlertMsg('저장 실패'); }
+    };
+
+    const handleDeleteAlert = async () => {
+        try {
+            await authFetch(`/alerts?symbol=${encodeURIComponent(activeStock.symbol)}`, { method: 'DELETE' });
+            setExistingAlert(null); setAlertTargetPrice(''); setAlertMsg('알림이 삭제되었습니다.');
+        } catch { setAlertMsg('삭제 실패'); }
+    };
 
     useEffect(() => {
         if (!activeStock) { setAnalysis(null); return; }
@@ -865,18 +914,57 @@ const ChartSection = ({ activeStock }) => {
         <div className="glass-panel chart-section">
             <div className="chart-header">
                 <div className="chart-title">{activeStock.name} ({activeStock.symbol})</div>
-                <div className="timeframe-selector">
-                    {['1W', '1M', '3M', '1Y'].map(tf => (
-                        <button 
-                            key={tf}
-                            className={`timeframe-btn ${timeframe === tf ? 'active' : ''}`}
-                            onClick={() => setTimeframe(tf)}
-                        >
-                            {tf}
+                <div style={{display:'flex', alignItems:'center', gap:'0.5rem'}}>
+                    {user && (
+                        <button onClick={() => { setShowAlert(v => !v); setAlertMsg(''); }}
+                            title="가격 알림 설정"
+                            style={{background:'none', border:'none', cursor:'pointer', padding:'2px', color: existingAlert && !existingAlert.triggeredAt ? '#f59e0b' : 'var(--text-muted)', display:'flex', alignItems:'center'}}>
+                            <span className="material-symbols-outlined" style={{fontSize:'1.2rem'}}>
+                                {existingAlert && !existingAlert.triggeredAt ? 'notifications_active' : 'notifications'}
+                            </span>
                         </button>
-                    ))}
+                    )}
+                    <div className="timeframe-selector">
+                        {['1W', '1M', '3M', '1Y'].map(tf => (
+                            <button
+                                key={tf}
+                                className={`timeframe-btn ${timeframe === tf ? 'active' : ''}`}
+                                onClick={() => setTimeframe(tf)}
+                            >
+                                {tf}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
+            {showAlert && user && (
+                <div style={{padding:'0.75rem 0.5rem', borderBottom:'1px solid rgba(255,255,255,0.08)', fontSize:'0.82rem'}}>
+                    {existingAlert && !existingAlert.triggeredAt ? (
+                        <div style={{marginBottom:'0.5rem', color:'#f59e0b'}}>
+                            현재 알림: <strong>{existingAlert.targetPrice.toLocaleString()}{activeStock.currency === 'KRW' ? '원' : '$'} {existingAlert.condition === 'above' ? '이상' : '이하'}</strong>
+                        </div>
+                    ) : existingAlert?.triggeredAt ? (
+                        <div style={{marginBottom:'0.5rem', color:'#10b981'}}>이전 알림 발동됨 ({existingAlert.triggeredAt})</div>
+                    ) : null}
+                    <div style={{display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap'}}>
+                        {quote && <span style={{color:'var(--text-muted)'}}>현재가: {parseFloat(quote['05. price'] || 0).toLocaleString()}{activeStock.currency === 'KRW' ? '원' : '$'}</span>}
+                        <select value={alertCondition} onChange={e => setAlertCondition(e.target.value)}
+                            style={{background:'var(--bg-secondary)', color:'var(--text-primary)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'4px', padding:'3px 6px', fontSize:'0.8rem'}}>
+                            <option value="above">이상</option>
+                            <option value="below">이하</option>
+                        </select>
+                        <input type="number" value={alertTargetPrice} onChange={e => setAlertTargetPrice(e.target.value)}
+                            placeholder="목표가" style={{width:'100px', background:'var(--bg-secondary)', color:'var(--text-primary)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'4px', padding:'3px 8px', fontSize:'0.8rem'}} />
+                        <button onClick={handleSaveAlert}
+                            style={{background:'#2563eb', color:'#fff', border:'none', borderRadius:'4px', padding:'4px 10px', fontSize:'0.8rem', cursor:'pointer'}}>저장</button>
+                        {existingAlert && (
+                            <button onClick={handleDeleteAlert}
+                                style={{background:'rgba(239,68,68,0.15)', color:'#ef4444', border:'none', borderRadius:'4px', padding:'4px 10px', fontSize:'0.8rem', cursor:'pointer'}}>삭제</button>
+                        )}
+                    </div>
+                    {alertMsg && <div style={{marginTop:'0.4rem', color: alertMsg.includes('실패') ? '#ef4444' : '#10b981'}}>{alertMsg}</div>}
+                </div>
+            )}
             {loading ? (
                 <div className="spinner"></div>
             ) : (
@@ -1317,7 +1405,7 @@ const App = () => {
                 </div>
             )}
             <div className="main-grid">
-                <ChartSection activeStock={activeStock} />
+                <ChartSection activeStock={activeStock} user={user} quote={activeStock ? quotes[activeStock.symbol] || null : null} />
                 <NewsSection activeStock={activeStock} />
             </div>
 

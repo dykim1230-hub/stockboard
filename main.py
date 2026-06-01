@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from fastapi import FastAPI, Query, Header, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Query, Header, HTTPException, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import yfinance as yf
@@ -564,8 +564,8 @@ def _gemini_stock_analysis(stock_summaries: list, model: str = "gemini-2.5-flash
         f"종목 목록:\n{stocks_text}"
     )
 
-    # 0~1번: 지정 모델, 2번 이후: gemini-1.5-flash 폴백
-    fallback_model = "gemini-1.5-flash"
+    # 0~1번: 지정 모델, 2번 이후: gemini-2.0-flash 폴백
+    fallback_model = "gemini-2.0-flash"
     max_attempts = 5
     for attempt in range(max_attempts):
         current_model = model if attempt < 2 else fallback_model
@@ -960,6 +960,131 @@ def run_digest_cron(
     if x_cron_secret != cron_secret:
         raise HTTPException(status_code=403, detail="Forbidden")
     return _run_digest_job(dry_run=dry_run, include_details=include_details, force=force)
+
+
+# ── Price Alerts ───────────────────────────────────────────
+
+def _build_price_alert_email(name: str, symbol: str, target_text: str, current_text: str, condition_text: str) -> str:
+    return (
+        f"<!doctype html><html><body style='margin:0;padding:0;background:#f3f4f6;"
+        f"font-family:Arial,sans-serif;'>"
+        f"<div style='max-width:480px;margin:0 auto;padding:24px;'>"
+        f"<div style='background:#fff;border-radius:10px;padding:28px;'>"
+        f"<h1 style='margin:0 0 6px;font-size:20px;color:#111827;'>📈 목표가 도달 알림</h1>"
+        f"<p style='margin:0 0 20px;font-size:13px;color:#6b7280;'>MarketPulse</p>"
+        f"<div style='padding:16px;background:#f0fdf4;border-left:4px solid #16a34a;border-radius:0 8px 8px 0;'>"
+        f"<p style='margin:0;font-size:15px;font-weight:700;color:#111827;'>{html.escape(name)} "
+        f"<span style='font-size:12px;color:#6b7280;'>({html.escape(symbol)})</span></p>"
+        f"<p style='margin:6px 0 0;font-size:13px;color:#374151;'>설정 목표가 "
+        f"<strong>{html.escape(target_text)} {html.escape(condition_text)}</strong>에 도달했습니다.</p>"
+        f"<p style='margin:4px 0 0;font-size:13px;color:#374151;'>현재가: <strong>{html.escape(current_text)}</strong></p>"
+        f"</div>"
+        f"<div style='margin-top:20px;text-align:center;'>"
+        f"<a href='https://portfolio-4ffcf.web.app' style='display:inline-block;background:#2563eb;"
+        f"color:#fff;text-decoration:none;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:600;'>"
+        f"MarketPulse에서 확인하기</a></div></div></div></body></html>"
+    )
+
+
+@app.get("/api/alerts")
+def get_alerts(authorization: str = Header(None)):
+    decoded = _verify_token(authorization)
+    db = _get_firestore_client()
+    doc = db.collection("users").document(decoded["uid"]).get()
+    return (doc.to_dict() or {}).get("priceAlerts") or []
+
+
+@app.post("/api/alerts")
+async def set_alert(request: Request, authorization: str = Header(None)):
+    decoded = _verify_token(authorization)
+    body = await request.json()
+    symbol = body.get("symbol")
+    if not symbol:
+        raise HTTPException(status_code=400, detail="symbol required")
+    db = _get_firestore_client()
+    ref = db.collection("users").document(decoded["uid"])
+    data = (ref.get().to_dict()) or {}
+    alerts = [a for a in (data.get("priceAlerts") or []) if a.get("symbol") != symbol]
+    alerts.append({
+        "symbol": symbol,
+        "name": body.get("name", symbol),
+        "currency": body.get("currency", "KRW"),
+        "isKorean": body.get("isKorean", True),
+        "targetPrice": float(body.get("targetPrice", 0)),
+        "condition": body.get("condition", "above"),
+        "triggeredAt": None,
+    })
+    ref.set({"priceAlerts": alerts}, merge=True)
+    return {"success": True}
+
+
+@app.delete("/api/alerts")
+def delete_alert(symbol: str = Query(...), authorization: str = Header(None)):
+    decoded = _verify_token(authorization)
+    db = _get_firestore_client()
+    ref = db.collection("users").document(decoded["uid"])
+    data = (ref.get().to_dict()) or {}
+    alerts = [a for a in (data.get("priceAlerts") or []) if a.get("symbol") != symbol]
+    ref.set({"priceAlerts": alerts}, merge=True)
+    return {"success": True}
+
+
+@app.post("/api/cron/price-check")
+def run_price_check(x_cron_secret: str = Header(None)):
+    cron_secret = os.environ.get("CRON_SECRET")
+    if not cron_secret or x_cron_secret != cron_secret:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not _init_firebase_admin():
+        raise HTTPException(status_code=503, detail="Admin SDK not configured")
+    db = _get_firestore_client()
+    sent = failed = 0
+    for doc in db.collection("users").stream():
+        data = doc.to_dict() or {}
+        alerts = data.get("priceAlerts") or []
+        active = [a for a in alerts if not a.get("triggeredAt")]
+        if not active:
+            continue
+        email = data.get("email")
+        if not email:
+            try:
+                email = admin_auth.get_user(doc.id).email
+            except Exception:
+                email = None
+        if not email:
+            continue
+        updated = list(alerts)
+        changed = False
+        for i, alert in enumerate(updated):
+            if alert.get("triggeredAt"):
+                continue
+            symbol = alert.get("symbol")
+            quote = get_quote(symbol)
+            if not quote:
+                continue
+            current_price = float(quote.get("05. price", 0) or 0)
+            target_price = float(alert.get("targetPrice", 0))
+            condition = alert.get("condition", "above")
+            triggered = (condition == "above" and current_price >= target_price) or \
+                        (condition == "below" and current_price <= target_price)
+            if not triggered:
+                continue
+            updated[i] = {**alert, "triggeredAt": datetime.now(ZoneInfo("Asia/Seoul")).strftime("%Y-%m-%d %H:%M")}
+            changed = True
+            currency = alert.get("currency", "KRW")
+            name = alert.get("name", symbol)
+            cond_text = "이상" if condition == "above" else "이하"
+            target_text = f"{round(target_price):,}원" if currency == "KRW" else f"${target_price:,.2f}"
+            current_text = f"{round(current_price):,}원" if currency == "KRW" else f"${current_price:,.2f}"
+            try:
+                _send_resend_email(email, f"[MarketPulse] {name} 목표가 도달 알림",
+                                   _build_price_alert_email(name, symbol, target_text, current_text, cond_text))
+                sent += 1
+            except Exception as e:
+                print(f"Price alert email error ({symbol}): {e}")
+                failed += 1
+        if changed:
+            doc.reference.set({"priceAlerts": updated}, merge=True)
+    return {"sent": sent, "failed": failed}
 
 
 # ── Admin API ──────────────────────────────────────────────
