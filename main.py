@@ -363,7 +363,7 @@ def get_analysis(
         return cached
 
     stock_summary = _build_stock_digest({"symbol": symbol, "name": name or symbol, "isKorean": is_korean})
-    results = _gemini_stock_analysis([stock_summary], model="gemini-1.5-flash")
+    results = _gemini_stock_analysis([stock_summary], model="gemini-2.0-flash")
     result = results[0] if results else {"comment": "", "news_items": []}
     if result.get("comment"):
         _set_cache(cache_key, result, ttl=1800)
