@@ -354,6 +354,7 @@ const AdminModal = ({ isOpen, onClose, currentUid }) => {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [msg, setMsg] = useState('');
+    const [digestLoading, setDigestLoading] = useState(false);
 
     useEffect(() => {
         if (!isOpen) { setMsg(''); return; }
@@ -387,13 +388,34 @@ const AdminModal = ({ isOpen, onClose, currentUid }) => {
         } catch { setMsg('발송 실패'); }
     };
 
+    const handleForceDigest = async () => {
+        if (!window.confirm('모든 구독 회원에게 뉴스레터를 즉시 발송하시겠습니까?')) return;
+        setDigestLoading(true);
+        setMsg('');
+        try {
+            const result = await adminFetch('/api/admin/digest/force', { method: 'POST' });
+            setMsg(`발송 완료 — 발송 ${result.sent}명 / 실패 ${result.failed}명 / 전체 ${result.checked}명`);
+        } catch (e) {
+            setMsg(`발송 오류: ${e.message}`);
+        } finally {
+            setDigestLoading(false);
+        }
+    };
+
     if (!isOpen) return null;
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth:'700px', width:'95vw'}}>
                 <div className="modal-header">
                     <h2 className="modal-title">관리자 — 회원 관리</h2>
-                    <button className="close-btn" onClick={onClose}><span className="material-symbols-outlined">close</span></button>
+                    <div style={{display:'flex', alignItems:'center', gap:'0.5rem'}}>
+                        <button className="btn" onClick={handleForceDigest} disabled={digestLoading}
+                            style={{fontSize:'0.78rem', padding:'0.35rem 0.75rem', background:'rgba(37,99,235,0.15)', border:'1px solid rgba(37,99,235,0.3)', display:'flex', alignItems:'center', gap:'0.3rem'}}>
+                            <span className="material-symbols-outlined" style={{fontSize:'1rem'}}>send</span>
+                            {digestLoading ? '발송 중...' : '강제 발송'}
+                        </button>
+                        <button className="close-btn" onClick={onClose}><span className="material-symbols-outlined">close</span></button>
+                    </div>
                 </div>
                 <div className="modal-body">
                     {msg && <div style={{marginBottom:'0.75rem', fontSize:'0.85rem', color: msg.startsWith('오류') ? '#ef4444' : '#10b981'}}>{msg}</div>}

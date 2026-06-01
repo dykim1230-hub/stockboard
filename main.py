@@ -988,6 +988,13 @@ def admin_reset_password(uid: str, authorization: str = Header(None)):
     link = admin_auth.generate_password_reset_link(user.email)
     return {"success": True, "email": user.email, "reset_link": link}
 
+@app.post("/api/admin/digest/force")
+def admin_force_digest(authorization: str = Header(None)):
+    if not _init_firebase_admin():
+        raise HTTPException(status_code=503, detail="Admin SDK not configured")
+    _verify_admin(authorization)
+    return _run_digest_job(force=True, include_details=True)
+
 
 if __name__ == "__main__":
     import uvicorn
