@@ -393,8 +393,8 @@ const AdminModal = ({ isOpen, onClose, currentUid }) => {
         setDigestLoading(true);
         setMsg('');
         try {
-            const result = await adminFetch('/api/admin/digest/force', { method: 'POST' });
-            setMsg(`발송 완료 — 발송 ${result.sent}명 / 실패 ${result.failed}명 / 전체 ${result.checked}명`);
+            await adminFetch('/api/admin/digest/force', { method: 'POST' });
+            setMsg('발송 시작됨 — 백그라운드에서 처리 중입니다. 결과는 Render 로그에서 확인하세요.');
         } catch (e) {
             setMsg(`발송 오류: ${e.message}`);
         } finally {

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from fastapi import FastAPI, Query, Header, HTTPException
+from fastapi import FastAPI, Query, Header, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import yfinance as yf
@@ -989,11 +989,12 @@ def admin_reset_password(uid: str, authorization: str = Header(None)):
     return {"success": True, "email": user.email, "reset_link": link}
 
 @app.post("/api/admin/digest/force")
-def admin_force_digest(authorization: str = Header(None)):
+def admin_force_digest(background_tasks: BackgroundTasks, authorization: str = Header(None)):
     if not _init_firebase_admin():
         raise HTTPException(status_code=503, detail="Admin SDK not configured")
     _verify_admin(authorization)
-    return _run_digest_job(force=True, include_details=True)
+    background_tasks.add_task(_run_digest_job, force=True)
+    return {"status": "started"}
 
 
 if __name__ == "__main__":
