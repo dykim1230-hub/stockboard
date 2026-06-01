@@ -542,20 +542,21 @@ def _gemini_stock_analysis(stock_summaries: list) -> list:
         f"종목 목록:\n{stocks_text}"
     )
 
-    for attempt in range(3):
+    max_attempts = 5
+    for attempt in range(max_attempts):
         try:
             response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
             text = _extract_gemini_text(response).strip()
             if not text:
                 print(f"Gemini stock analysis: empty response (attempt {attempt+1})")
-                if attempt < 2:
+                if attempt < max_attempts - 1:
                     time.sleep(5)
                     continue
                 break
             result = _parse_first_json_array(text)
             if result is None:
                 print(f"Gemini stock analysis: no JSON array found (attempt {attempt+1}): {text[:200]}")
-                if attempt < 2:
+                if attempt < max_attempts - 1:
                     time.sleep(5)
                     continue
                 break
@@ -567,8 +568,10 @@ def _gemini_stock_analysis(stock_summaries: list) -> list:
                 or "503" in err_str or "unavailable" in err_str.lower() or "overloaded" in err_str.lower()
             )
             print(f"Gemini stock analysis error (attempt {attempt+1}): {e}")
-            if is_retryable and attempt < 2:
-                time.sleep(30 * (attempt + 1))
+            if is_retryable and attempt < max_attempts - 1:
+                wait = min(30 * (2 ** attempt), 120)  # 30, 60, 120, 120
+                print(f"Gemini stock analysis: retrying in {wait}s (attempt {attempt+1}/{max_attempts})")
+                time.sleep(wait)
                 continue
             break
     return empty
