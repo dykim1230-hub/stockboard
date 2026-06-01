@@ -29,24 +29,28 @@
 | 수신자별 뉴스레터 내용 불일치 버그 수정 | 완료 (2026-05-26) — Gemini rate limit으로 인한 내용 누락 수정 |
 | Gemini JSON 파싱 오류 수정 | 완료 (2026-05-30) — greedy 정규식 → raw_decode 교체, Extra data 에러 방지 |
 | 배포 자동 점검 체계 | 완료 (2026-05-30) — scripts/post-deploy.sh, docs/deploy-checklist.md 추가 |
+| Gemini 503 재시도 강화 | 완료 (2026-06-01) — 3회→5회, 지수 백오프(30→60→120→120s) |
+| Gemini 모델 폴백 | 완료 (2026-06-01) — 2.5-flash 실패 시 2.0-flash 자동 전환 |
+| 수신 해지 링크 | 완료 (2026-06-01) — GET /api/unsubscribe, HMAC-SHA256 토큰 인증, 메일 하단 삽입 |
+| 관리자 강제 발송 버튼 | 완료 (2026-06-01) — 관리자 패널 내 버튼, BackgroundTasks로 타임아웃 방지 |
+| 차트 AI 투자의견 | 완료 (2026-06-01) — GET /api/analysis, gemini-2.0-flash, 30분 캐시, 차트 하단 표시 |
+| 종목 가격 알림 | 완료 (2026-06-01) — GET/POST/DELETE /api/alerts, POST /api/cron/price-check, 차트 헤더 벨 아이콘 |
+| ahdoyoon.site 도메인 연결 | 완료 (2026-06-01) — Firebase Hosting 커스텀 도메인 연결 |
 
 ## 다음 작업 후보
 
-1. **애널리스트 의견 기능** — Gemini AI 투자 의견으로 대체 완료 (2026-05-26)
+1. **cron-job.org 가격 알림 체크 job 추가** (필수)
+   - URL: `https://stockboard-fhh4.onrender.com/api/cron/price-check`
+   - Method: POST, Header: `x-cron-secret`, 주기: 30분
 
-1. **차트 기술 지표 추가**
-   - 현재 차트 데이터는 yfinance로 이미 받고 있음 (백엔드 변경 불필요)
-   - Chart.js에서 MA5/MA20/MA60, 볼린저밴드, 거래량 바 추가
-   - 프론트엔드만 수정하면 됨
+2. **차트 MA5/MA20 기술 지표**
+   - Chart.js에서 이동평균선 추가 (프론트엔드만 수정)
 
-2. **PWA 전환**
+3. **포트폴리오 수익률 트래킹**
+   - Firestore 스키마 변경 필요, 중간 난이도
+
+4. **PWA 전환**
    - `manifest.json` + `service-worker.js` 추가
-   - 홈 화면에 앱 아이콘 추가, 오프라인 캐시 지원
-   - 앱스토어 없이 모바일 앱처럼 사용 가능
-
-3. **수신 해지/설정 링크** (기존 미완)
-   - 메일 본문 하단에 "설정 변경" 링크 추가
-   - 현재 메일에 사이트 이동 버튼은 있음. 직접 설정 화면 딥링크 추가 검토
 
 ## 작업 시작 체크리스트
 
@@ -82,8 +86,10 @@ bash scripts/post-deploy.sh
 
 | 항목 | 내용 |
 | --- | --- |
-| 날짜 | 2026-05-30 |
+| 날짜 | 2026-06-01 |
 | 작성자 | Claude Sonnet 4.6 |
-| 작업 환경 | Windows 11. 백엔드는 push → Render 자동배포. |
-| 내용 | Gemini JSON 파싱 오류 수정(greedy 정규식 → raw_decode), 배포 자동 점검 체계 구축(post-deploy.sh, deploy-checklist.md). 강제 발송 3명 전원 정상 확인. |
-| 다음 우선순위 | 차트 기술 지표 추가(MA/볼린저밴드), PWA 전환, 수신 해지 링크 추가 |
+| 작업 환경 | Windows 11. 백엔드는 push → Render 자동배포. 도메인 ahdoyoon.site 연결 완료. |
+| 내용 | Gemini 재시도 강화(5회+지수백오프), 모델폴백(2.0-flash), 수신해지링크, 관리자강제발송버튼, 차트AI투자의견, 종목가격알림(Firestore+이메일) |
+| 다음 우선순위 | cron-job.org 가격알림 job 추가(즉시), 차트 MA5/MA20, 포트폴리오 수익률 트래킹 |
+| Gemini 모델 현황 | 뉴스레터: 2.5-flash(20회/일), 차트투자의견: 2.0-flash(1500회/일), 폴백: 2.0-flash |
+| 주의 | gemini-1.5-flash는 이 계정 v1beta에서 404. 사용 금지. |

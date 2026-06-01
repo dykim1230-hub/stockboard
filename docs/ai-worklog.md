@@ -11,6 +11,54 @@
 
 ## 로그
 
+### 2026-06-01 - Gemini 안정화, 수신해지, 관리자강제발송, 차트AI투자의견, 가격알림
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Sonnet 4.6 |
+| 변경 파일 | `main.py`, `index.html`, `docs/ai-handoff.md`, `docs/ai-worklog.md` |
+| 커밋 | `0eed973`, `137a66c`, `571a30e`, `b5642c4`, `f54cd36`, `121d2d7`, `a5a3420`, `5fd2c27`, `1c45e58` |
+
+**1. Gemini 503 재시도 강화**
+- 기존 3회(30s+60s) → 5회 지수 백오프(30→60→120→120s)
+- 반복되는 503 과부하 상황에서 빈 뉴스레터 발송 방지
+
+**2. Gemini 모델 폴백 추가**
+- `_gemini_stock_analysis`에 `model` 파라미터 추가
+- 지정 모델 2회 실패 시 `gemini-2.0-flash`로 자동 전환
+- 뉴스레터: `gemini-2.5-flash`(20회/일 한도) 유지
+- 차트 투자의견: `gemini-2.0-flash`(1500회/일) 사용 — 할당량 분리
+- **주의**: `gemini-1.5-flash`는 이 계정 v1beta에서 404 — 사용 불가
+
+**3. 수신 해지 링크**
+- `GET /api/unsubscribe?uid=&token=` 엔드포인트
+- HMAC-SHA256(CRON_SECRET, uid) 토큰으로 인증 — 링크 위변조 불가
+- 메일 하단 "수신 해지" 링크 삽입
+
+**4. 관리자 강제 발송 버튼**
+- `POST /api/admin/digest/force` (admin Bearer 토큰 인증)
+- 관리자 패널 헤더에 "강제 발송" 버튼 추가
+- `BackgroundTasks`로 즉시 응답 → Render 30초 타임아웃 방지
+
+**5. 차트 AI 투자의견**
+- `GET /api/analysis?symbol=&name=&is_korean=` 엔드포인트
+- `gemini-2.0-flash` 사용, 30분 캐시
+- 차트 하단 AI 투자의견 섹션 표시 (로딩/완료/오류 상태)
+- AI 참고 의견 면책 문구 포함
+
+**6. 종목 가격 알림**
+- `GET/POST/DELETE /api/alerts` — 알림 CRUD (Firebase Bearer 토큰 인증)
+- `POST /api/cron/price-check` — 가격 체크 & Resend 이메일 발송
+- Firestore `users/{uid}.priceAlerts` 배열에 저장
+- 차트 헤더 벨 아이콘 클릭 → 조건(이상/이하) + 목표가 설정
+- 알림 발동 시 `triggeredAt` 기록 (재발동 방지)
+- **미완**: cron-job.org에 `/api/cron/price-check` 30분 job 추가 필요
+
+**7. 도메인**
+- `ahdoyoon.site` Firebase Hosting 커스텀 도메인 연결 완료
+
+---
+
 ### 2026-05-30 - Gemini JSON 파싱 오류 수정 및 배포 자동 점검 체계 구축
 
 | 항목 | 내용 |
