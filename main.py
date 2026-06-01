@@ -351,6 +351,25 @@ def get_news(
     return result
 
 
+@app.get("/api/analysis")
+def get_analysis(
+    symbol: str = Query(...),
+    name: str = Query(""),
+    is_korean: bool = Query(True),
+):
+    cache_key = f"analysis:{symbol}"
+    cached, hit = _get_cache(cache_key)
+    if hit:
+        return cached
+
+    stock_summary = _build_stock_digest({"symbol": symbol, "name": name or symbol, "isKorean": is_korean})
+    results = _gemini_stock_analysis([stock_summary])
+    result = results[0] if results else {"comment": "", "news_items": []}
+    if result.get("comment"):
+        _set_cache(cache_key, result, ttl=1800)
+    return result
+
+
 def _parse_pub_date(date_str: str) -> datetime:
     try:
         return parsedate_to_datetime(date_str)

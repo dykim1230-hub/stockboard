@@ -721,6 +721,19 @@ const ChartSection = ({ activeStock }) => {
     const [timeframe, setTimeframe] = useState('1M');
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [analysis, setAnalysis] = useState(null);
+    const [analysisLoading, setAnalysisLoading] = useState(false);
+
+    useEffect(() => {
+        if (!activeStock) { setAnalysis(null); return; }
+        setAnalysis(null);
+        setAnalysisLoading(true);
+        fetch(`${BASE_URL}/analysis?symbol=${encodeURIComponent(activeStock.symbol)}&name=${encodeURIComponent(activeStock.name)}&is_korean=${activeStock.isKorean !== false}`)
+            .then(r => r.json())
+            .then(d => setAnalysis(d.comment ? d : null))
+            .catch(() => setAnalysis(null))
+            .finally(() => setAnalysisLoading(false));
+    }, [activeStock?.symbol]);
 
     useEffect(() => {
         if (!activeStock) return;
@@ -871,6 +884,22 @@ const ChartSection = ({ activeStock }) => {
                     <canvas ref={chartRef}></canvas>
                 </div>
             )}
+            <div style={{marginTop:'1rem', borderTop:'1px solid rgba(255,255,255,0.06)', paddingTop:'1rem'}}>
+                <div style={{fontSize:'0.72rem', fontWeight:'700', color:'var(--text-muted)', letterSpacing:'0.05em', marginBottom:'0.5rem'}}>AI 투자 의견</div>
+                {analysisLoading ? (
+                    <div style={{display:'flex', alignItems:'center', gap:'0.5rem', color:'var(--text-muted)', fontSize:'0.8rem'}}>
+                        <div className="spinner" style={{width:'14px', height:'14px', borderWidth:'2px'}}></div>
+                        분석 중...
+                    </div>
+                ) : analysis?.comment ? (
+                    <div style={{padding:'0.75rem 1rem', background:'rgba(37,99,235,0.08)', borderLeft:'3px solid #2563eb', borderRadius:'0 6px 6px 0', fontSize:'0.82rem', color:'#93c5fd', lineHeight:'1.7'}}>
+                        📌 {analysis.comment}
+                    </div>
+                ) : (
+                    <div style={{fontSize:'0.8rem', color:'var(--text-muted)'}}>분석 정보를 불러올 수 없습니다.</div>
+                )}
+                <div style={{marginTop:'0.4rem', fontSize:'0.68rem', color:'var(--text-muted)'}}>※ AI가 생성한 참고 의견입니다. 투자 판단의 근거로 사용하지 마세요.</div>
+            </div>
         </div>
     );
 };
