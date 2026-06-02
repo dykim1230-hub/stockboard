@@ -718,11 +718,16 @@ const FavoriteCard = ({ favorite, isActive, onClick, onToggle, quote, quotesLoad
 const ChartSection = ({ activeStock }) => {
     const chartRef = useRef(null);
     const chartInstance = useRef(null);
+    const volChartRef = useRef(null);
+    const volChartInstance = useRef(null);
     const [timeframe, setTimeframe] = useState('1M');
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [analysis, setAnalysis] = useState(null);
     const [analysisLoading, setAnalysisLoading] = useState(false);
+    const [indicators, setIndicators] = useState({ ma5: false, ma20: false, ma60: false, bb: false, vol: false });
+
+    const toggleIndicator = (key) => setIndicators(prev => ({ ...prev, [key]: !prev[key] }));
 
     useEffect(() => {
         if (!activeStock) { setAnalysis(null); return; }
@@ -737,7 +742,6 @@ const ChartSection = ({ activeStock }) => {
 
     useEffect(() => {
         if (!activeStock) return;
-        
         const loadData = async () => {
             setLoading(true);
             const tsData = await fetchTimeSeries(activeStock.symbol);
@@ -745,7 +749,8 @@ const ChartSection = ({ activeStock }) => {
                 const entries = Object.entries(tsData)
                     .map(([date, values]) => ({
                         date,
-                        close: parseFloat(values['4. close'])
+                        close: parseFloat(values['4. close']),
+                        volume: parseInt(values['5. volume'] || 0, 10),
                     }))
                     .sort((a, b) => new Date(a.date) - new Date(b.date));
                 setData(entries);
@@ -754,101 +759,172 @@ const ChartSection = ({ activeStock }) => {
             }
             setLoading(false);
         };
-        
         loadData();
     }, [activeStock]);
 
     useEffect(() => {
+        return () => {
+            if (chartInstance.current) chartInstance.current.destroy();
+            if (volChartInstance.current) volChartInstance.current.destroy();
+        };
+    }, []);
+
+    useEffect(() => {
         if (!data || !chartRef.current) return;
 
-        let filteredData = [...data];
-        const now = new Date(data[data.length - 1]?.date || Date.now()); 
-        
+        const calcMA = (values, period) => values.map((_, i) => {
+            if (i < period - 1) return null;
+            return values.slice(i - period + 1, i + 1).reduce((s, v) => s + v, 0) / period;
+        });
+
+        const calcBB = (values) => {
+            const period = 20;
+            const ma = calcMA(values, period);
+            return values.map((_, i) => {
+                if (i < period - 1) return { upper: null, lower: null };
+                const slice = values.slice(i - period + 1, i + 1);
+                const mean = ma[i];
+                const std = Math.sqrt(slice.reduce((s, v) => s + (v - mean) ** 2, 0) / period);
+                return { upper: mean + 2 * std, lower: mean - 2 * std };
+            });
+        };
+
+        let filtered = [...data];
+        const now = new Date(data[data.length - 1]?.date || Date.now());
+
         if (timeframe === '1W') {
-            const weekAgo = new Date(now);
-            weekAgo.setDate(weekAgo.getDate() - 7);
-            filteredData = data.filter(d => new Date(d.date) >= weekAgo);
+            const ago = new Date(now); ago.setDate(ago.getDate() - 7);
+            filtered = data.filter(d => new Date(d.date) >= ago);
         } else if (timeframe === '1M') {
-            const monthAgo = new Date(now);
-            monthAgo.setMonth(monthAgo.getMonth() - 1);
-            filteredData = data.filter(d => new Date(d.date) >= monthAgo);
+            const ago = new Date(now); ago.setMonth(ago.getMonth() - 1);
+            filtered = data.filter(d => new Date(d.date) >= ago);
         } else if (timeframe === '3M') {
-            const threeMonthsAgo = new Date(now);
-            threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-            filteredData = data.filter(d => new Date(d.date) >= threeMonthsAgo);
+            const ago = new Date(now); ago.setMonth(ago.getMonth() - 3);
+            filtered = data.filter(d => new Date(d.date) >= ago);
         }
 
-        const labels = filteredData.map(d => d.date);
-        const values = filteredData.map(d => d.close);
-        
+        const labels = filtered.map(d => d.date);
+        const values = filtered.map(d => d.close);
+        const volumes = filtered.map(d => d.volume);
+        const cur = activeStock?.currency || 'USD';
+
         const isPositive = values[values.length - 1] >= values[0];
         const lineColor = isPositive ? '#10b981' : '#ef4444';
-        const gradientColor = isPositive ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+        const gradientColor = isPositive ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)';
 
-        if (chartInstance.current) {
-            chartInstance.current.destroy();
-        }
+        if (chartInstance.current) chartInstance.current.destroy();
 
         const ctx = chartRef.current.getContext('2d');
-        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        const gradient = ctx.createLinearGradient(0, 0, 0, 300);
         gradient.addColorStop(0, gradientColor);
-        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+        const datasets = [{
+            label: 'Price',
+            data: values,
+            borderColor: lineColor,
+            backgroundColor: gradient,
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            fill: true,
+            tension: 0.1,
+        }];
+
+        if (indicators.ma5) {
+            datasets.push({ label: 'MA5', data: calcMA(values, 5), borderColor: '#f59e0b', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.1 });
+        }
+        if (indicators.ma20) {
+            datasets.push({ label: 'MA20', data: calcMA(values, 20), borderColor: '#3b82f6', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.1 });
+        }
+        if (indicators.ma60) {
+            datasets.push({ label: 'MA60', data: calcMA(values, 60), borderColor: '#a855f7', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.1 });
+        }
+        if (indicators.bb) {
+            const bb = calcBB(values);
+            datasets.push({ label: '볼린저', data: bb.map(b => b.upper), borderColor: 'rgba(148,163,184,0.7)', borderWidth: 1, borderDash: [4, 3], pointRadius: 0, fill: false, tension: 0.1 });
+            datasets.push({ label: '__bb_lower__', data: bb.map(b => b.lower), borderColor: 'rgba(148,163,184,0.7)', borderWidth: 1, borderDash: [4, 3], pointRadius: 0, fill: false, tension: 0.1 });
+        }
 
         chartInstance.current = new Chart(ctx, {
             type: 'line',
-            data: {
-                labels,
-                datasets: [{
-                    label: `${activeStock.symbol} Price`,
-                    data: values,
-                    borderColor: lineColor,
-                    backgroundColor: gradient,
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    pointHoverRadius: 6,
-                    fill: true,
-                    tension: 0.1
-                }]
-            },
+            data: { labels, datasets },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                interaction: {
-                    intersect: false,
-                    mode: 'index',
-                },
+                interaction: { intersect: false, mode: 'index' },
                 plugins: {
-                    legend: { display: false },
+                    legend: {
+                        display: datasets.length > 1,
+                        labels: {
+                            color: '#94a3b8', font: { size: 11 }, boxWidth: 20, padding: 8,
+                            filter: item => !item.text.startsWith('__'),
+                        }
+                    },
                     tooltip: {
-                        backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                        backgroundColor: 'rgba(30,41,59,0.9)',
                         titleColor: '#f8fafc',
                         bodyColor: '#f8fafc',
                         borderColor: 'rgba(255,255,255,0.1)',
                         borderWidth: 1,
                         padding: 10,
-                        displayColors: false,
+                        filter: item => item.parsed.y !== null && !item.dataset.label.startsWith('__'),
                         callbacks: {
-                            label: function(context) {
-                                const cur = activeStock?.currency || 'USD';
-                                return formatTooltip(context.parsed.y, cur);
-                            }
+                            label: ctx => `${ctx.dataset.label}: ${formatTooltip(ctx.parsed.y, cur)}`
                         }
                     }
                 },
                 scales: {
-                    x: {
-                        grid: { display: false, drawBorder: false },
-                        ticks: { maxTicksLimit: 6, color: '#94a3b8' }
-                    },
-                    y: {
-                        grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
-                        ticks: { color: '#94a3b8', callback: (val) => formatChartTick(val, activeStock?.currency || 'USD') }
-                    }
+                    x: { grid: { display: false, drawBorder: false }, ticks: { maxTicksLimit: 6, color: '#94a3b8' } },
+                    y: { grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false }, ticks: { color: '#94a3b8', callback: val => formatChartTick(val, cur) } }
                 }
             }
         });
-        
-    }, [data, timeframe]);
+
+        if (volChartInstance.current) volChartInstance.current.destroy();
+        if (indicators.vol && volChartRef.current) {
+            const volCtx = volChartRef.current.getContext('2d');
+            volChartInstance.current = new Chart(volCtx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: '거래량',
+                        data: volumes,
+                        backgroundColor: values.map((v, i) =>
+                            i === 0 || v >= values[i - 1] ? 'rgba(16,185,129,0.5)' : 'rgba(239,68,68,0.5)'
+                        ),
+                        borderWidth: 0,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { intersect: false, mode: 'index' },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(30,41,59,0.9)',
+                            titleColor: '#f8fafc',
+                            bodyColor: '#f8fafc',
+                            callbacks: { label: ctx => `거래량: ${ctx.parsed.y.toLocaleString()}` }
+                        }
+                    },
+                    scales: {
+                        x: { grid: { display: false, drawBorder: false }, ticks: { display: false } },
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
+                            ticks: {
+                                color: '#94a3b8', maxTicksLimit: 3,
+                                callback: val => val >= 1e9 ? (val/1e9).toFixed(1)+'B' : val >= 1e6 ? (val/1e6).toFixed(1)+'M' : val >= 1e3 ? (val/1e3).toFixed(0)+'K' : val
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+    }, [data, timeframe, indicators]);
 
     if (!activeStock) {
         return (
@@ -861,28 +937,53 @@ const ChartSection = ({ activeStock }) => {
         );
     }
 
+    const indicatorConfig = [
+        { key: 'ma5',  label: 'MA5',  color: '#f59e0b' },
+        { key: 'ma20', label: 'MA20', color: '#3b82f6' },
+        { key: 'ma60', label: 'MA60', color: '#a855f7' },
+        { key: 'bb',   label: 'BB',   color: '#94a3b8' },
+        { key: 'vol',  label: '거래량', color: '#10b981' },
+    ];
+
     return (
         <div className="glass-panel chart-section">
             <div className="chart-header">
                 <div className="chart-title">{activeStock.name} ({activeStock.symbol})</div>
-                <div className="timeframe-selector">
-                    {['1W', '1M', '3M', '1Y'].map(tf => (
-                        <button
-                            key={tf}
-                            className={`timeframe-btn ${timeframe === tf ? 'active' : ''}`}
-                            onClick={() => setTimeframe(tf)}
-                        >
-                            {tf}
-                        </button>
-                    ))}
+                <div style={{display:'flex', gap:'0.5rem', alignItems:'center', flexWrap:'wrap', justifyContent:'flex-end'}}>
+                    <div className="timeframe-selector">
+                        {['1W', '1M', '3M', '1Y'].map(tf => (
+                            <button
+                                key={tf}
+                                className={`timeframe-btn ${timeframe === tf ? 'active' : ''}`}
+                                onClick={() => setTimeframe(tf)}
+                            >{tf}</button>
+                        ))}
+                    </div>
+                    <div className="timeframe-selector">
+                        {indicatorConfig.map(({ key, label, color }) => (
+                            <button
+                                key={key}
+                                className="timeframe-btn"
+                                style={indicators[key] ? { background: color, color: '#fff', borderColor: color } : {}}
+                                onClick={() => toggleIndicator(key)}
+                            >{label}</button>
+                        ))}
+                    </div>
                 </div>
             </div>
             {loading ? (
                 <div className="spinner"></div>
             ) : (
-                <div className="chart-container">
-                    <canvas ref={chartRef}></canvas>
-                </div>
+                <>
+                    <div className="chart-container">
+                        <canvas ref={chartRef}></canvas>
+                    </div>
+                    {indicators.vol && (
+                        <div style={{height:'80px', marginTop:'4px'}}>
+                            <canvas ref={volChartRef}></canvas>
+                        </div>
+                    )}
+                </>
             )}
             <div style={{marginTop:'1rem', borderTop:'1px solid rgba(255,255,255,0.06)', paddingTop:'1rem'}}>
                 <div style={{fontSize:'0.72rem', fontWeight:'700', color:'var(--text-muted)', letterSpacing:'0.05em', marginBottom:'0.5rem'}}>AI 투자 의견</div>

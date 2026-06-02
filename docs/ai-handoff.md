@@ -43,8 +43,7 @@
    - URL: `https://stockboard-fhh4.onrender.com/api/cron/price-check`
    - Method: POST, Header: `x-cron-secret`, 주기: 30분
 
-2. **차트 MA5/MA20 기술 지표**
-   - Chart.js에서 이동평균선 추가 (프론트엔드만 수정)
+2. **차트 기술 지표 추가** — 완료 (2026-06-02) — MA5/MA20/MA60, 볼린저밴드(20일 2σ), 거래량 바 추가. 백엔드 `/api/chart`에 `5. volume` 추가, 프론트 `ChartSection`에 지표 토글 버튼 구현.
 
 3. **포트폴리오 수익률 트래킹**
    - Firestore 스키마 변경 필요, 중간 난이도
@@ -86,10 +85,10 @@ bash scripts/post-deploy.sh
 
 | 항목 | 내용 |
 | --- | --- |
-| 날짜 | 2026-06-01 |
+| 날짜 | 2026-06-02 |
 | 작성자 | Claude Sonnet 4.6 |
-| 작업 환경 | Windows 11. 백엔드는 push → Render 자동배포. 도메인 ahdoyoon.site 연결 완료. |
-| 내용 | Gemini 재시도 강화(5회+지수백오프), 모델폴백(2.0-flash), 수신해지링크, 관리자강제발송버튼, 차트AI투자의견, 종목가격알림(Firestore+이메일) |
-| 다음 우선순위 | cron-job.org 가격알림 job 추가(즉시), 차트 MA5/MA20, 포트폴리오 수익률 트래킹 |
+| 작업 환경 | macOS. 백엔드는 push → Render 자동배포. 도메인 ahdoyoon.site 연결 완료. |
+| 내용 | 차트 기술 지표 추가. `main.py` `/api/chart`에 `5. volume` 필드 추가. `index.html` `ChartSection`에 MA5/MA20/MA60(이동평균), BB(볼린저밴드 20일 2σ), 거래량 토글 버튼 구현. |
+| 다음 우선순위 | cron-job.org 가격알림 job 추가(즉시), 포트폴리오 수익률 트래킹, PWA 전환 |
 | Gemini 모델 현황 | 뉴스레터: 2.5-flash(20회/일), 차트투자의견: 2.0-flash(1500회/일), 폴백: 2.0-flash |
 | 주의 | gemini-1.5-flash는 이 계정 v1beta에서 404. 사용 금지. |

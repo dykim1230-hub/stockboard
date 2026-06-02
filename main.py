@@ -320,7 +320,7 @@ def get_chart(symbol: str = Query(...)):
         if hist.empty:
             return None
         data = {
-            index.strftime("%Y-%m-%d"): {"4. close": float(row["Close"])}
+            index.strftime("%Y-%m-%d"): {"4. close": float(row["Close"]), "5. volume": int(row["Volume"])}
             for index, row in hist.iterrows()
         }
         _set_cache(cache_key, data, ttl=3600)
