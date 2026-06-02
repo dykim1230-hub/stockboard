@@ -355,6 +355,44 @@ def get_news(
     return result
 
 
+def _gemini_chart_comment(name: str, symbol: str, change_pct, news_titles: list) -> str:
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return ""
+    headlines = "\n".join(f"- {t}" for t in news_titles[:5]) or "- 관련 뉴스 없음"
+    prompt = (
+        f"종목: {name} ({symbol}), 등락: {change_pct}\n"
+        f"관련 뉴스 헤드라인:\n{headlines}\n\n"
+        "위 정보를 바탕으로 투자자 관점에서 오늘의 핵심 포인트를 2~3문장으로 작성해주세요.\n"
+        '반드시 JSON 형식으로만 응답하세요: {"comment": "..."}'
+    )
+    client = google_genai.Client(api_key=api_key)
+    for attempt in range(3):
+        try:
+            response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+            text = _extract_gemini_text(response).strip()
+            if not text:
+                if attempt < 2:
+                    time.sleep(5)
+                continue
+            match = re.search(r'\{.*\}', text, re.DOTALL)
+            if match:
+                import json as _json
+                data = _json.loads(match.group())
+                return data.get("comment", "")
+        except Exception as e:
+            err_str = str(e)
+            is_retryable = (
+                "429" in err_str or "503" in err_str
+                or "rate" in err_str.lower() or "unavailable" in err_str.lower()
+            )
+            if is_retryable and attempt < 2:
+                time.sleep(10)
+                continue
+            break
+    return ""
+
+
 @app.get("/api/analysis")
 def get_analysis(
     symbol: str = Query(...),
@@ -366,10 +404,14 @@ def get_analysis(
     if hit:
         return cached
 
-    stock_summary = _build_stock_digest({"symbol": symbol, "name": name or symbol, "isKorean": is_korean})
-    results = _gemini_stock_analysis([stock_summary], model="gemini-2.0-flash")
-    result = results[0] if results else {"comment": "", "news_items": []}
-    if result.get("comment"):
+    quote = get_quote(symbol) if symbol else None
+    change_pct = f"{quote.get('10. change percent', 0):+.2f}%" if quote else "0%"
+    news = _google_news_rss(name or symbol, is_korean)[:5]
+    news_titles = [n.get("title", "") for n in news]
+
+    comment = _gemini_chart_comment(name or symbol, symbol, change_pct, news_titles)
+    result = {"comment": comment, "news_items": []}
+    if comment:
         _set_cache(cache_key, result, ttl=1800)
     return result
 
