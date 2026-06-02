@@ -259,6 +259,8 @@ def get_quotes(symbols: str = Query(...)):
                 "09. change": change,
                 "10. change percent": change_pct,
                 "11. currency": currency,
+                "12. 52w_high": float(fi.year_high) if fi.year_high else None,
+                "13. 52w_low": float(fi.year_low) if fi.year_low else None,
             }
             _set_cache(f"quote:{sym}", result, ttl=180)
             return sym, result
@@ -298,7 +300,9 @@ def get_quote(symbol: str = Query(...)):
             "05. price": price,
             "09. change": change,
             "10. change percent": change_pct,
-            "11. currency": currency
+            "11. currency": currency,
+            "12. 52w_high": float(fi.year_high) if fi.year_high else None,
+            "13. 52w_low": float(fi.year_low) if fi.year_low else None,
         }
         _set_cache(cache_key, result, ttl=180)
         return result
