@@ -36,20 +36,22 @@
 | 차트 AI 투자의견 | 완료 (2026-06-01) — GET /api/analysis, gemini-2.0-flash, 30분 캐시, 차트 하단 표시 |
 | 종목 가격 알림 | 완료 (2026-06-01) — GET/POST/DELETE /api/alerts, POST /api/cron/price-check, 차트 헤더 벨 아이콘 |
 | ahdoyoon.site 도메인 연결 | 완료 (2026-06-01) — Firebase Hosting 커스텀 도메인 연결 |
+| 차트 기술 지표 | 완료 (2026-06-02) — MA5/MA20/MA60, 볼린저밴드(20일 2σ), 거래량 바. 지표 토글 버튼 UI |
+| 52주 신고가/신저가 바 | 완료 (2026-06-02) — 종목 카드 하단 범위 바, 현재가 위치 색상(초록/빨강/회색) |
+| 차트 투자의견 Gemini 경량화 | 완료 (2026-06-02) — 종목 선택 시 뉴스 요약 불필요하게 생성하던 문제 수정. _gemini_chart_comment 분리, 2~3문장만 생성 |
 
 ## 다음 작업 후보
 
-1. **cron-job.org 가격 알림 체크 job 추가** (필수)
-   - URL: `https://stockboard-fhh4.onrender.com/api/cron/price-check`
-   - Method: POST, Header: `x-cron-secret`, 주기: 30분
-
-2. **차트 기술 지표 추가** — 완료 (2026-06-02) — MA5/MA20/MA60, 볼린저밴드(20일 2σ), 거래량 바 추가. 백엔드 `/api/chart`에 `5. volume` 추가, 프론트 `ChartSection`에 지표 토글 버튼 구현.
-
-3. **포트폴리오 수익률 트래킹**
+1. **포트폴리오 수익률 트래킹**
    - Firestore 스키마 변경 필요, 중간 난이도
 
-4. **PWA 전환**
+2. **경제지표 캘린더**
+   - 외부 데이터 소스 필요, 중간 난이도
+
+3. **PWA 전환**
    - `manifest.json` + `service-worker.js` 추가
+
+> 종목 가격 알림 기능 — 일반 증권앱과 차별점 없음으로 보류 결정 (2026-06-02)
 
 ## 작업 시작 체크리스트
 
@@ -87,8 +89,8 @@ bash scripts/post-deploy.sh
 | --- | --- |
 | 날짜 | 2026-06-02 |
 | 작성자 | Claude Sonnet 4.6 |
-| 작업 환경 | macOS. 백엔드는 push → Render 자동배포. 도메인 ahdoyoon.site 연결 완료. |
-| 내용 | 차트 기술 지표 추가. `main.py` `/api/chart`에 `5. volume` 필드 추가. `index.html` `ChartSection`에 MA5/MA20/MA60(이동평균), BB(볼린저밴드 20일 2σ), 거래량 토글 버튼 구현. |
-| 다음 우선순위 | cron-job.org 가격알림 job 추가(즉시), 포트폴리오 수익률 트래킹, PWA 전환 |
+| 작업 환경 | macOS. 백엔드는 push → Render 자동배포. 프론트는 firebase deploy --only hosting. |
+| 내용 | ①차트 기술지표(MA5/MA20/MA60/BB/거래량) ②52주 신고가/신저가 범위 바 ③차트 투자의견 Gemini 경량화(_gemini_chart_comment 분리) |
+| 다음 우선순위 | 포트폴리오 수익률 트래킹, 경제지표 캘린더, PWA 전환 |
 | Gemini 모델 현황 | 뉴스레터: 2.5-flash(20회/일), 차트투자의견: 2.0-flash(1500회/일), 폴백: 2.0-flash |
-| 주의 | gemini-1.5-flash는 이 계정 v1beta에서 404. 사용 금지. |
+| 주의 | gemini-1.5-flash는 이 계정 v1beta에서 404. 사용 금지. 종목 가격 알림 기능 보류(차별점 없음). |

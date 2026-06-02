@@ -11,6 +11,37 @@
 
 ## 로그
 
+### 2026-06-02 - 차트 기술지표, 52주 고저가, 투자의견 Gemini 경량화
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Sonnet 4.6 |
+| 변경 파일 | `main.py`, `index.html`, `docs/ai-handoff.md`, `docs/ai-worklog.md` |
+| 커밋 | `2a6e7cc`, `377be60`, `a7a3b22` |
+
+**1. 차트 기술 지표 추가**
+- `main.py` `/api/chart` 응답에 `5. volume` 필드 추가 (yfinance `Volume`)
+- `index.html` `ChartSection`에 지표 토글 버튼 구현 (MA5/MA20/MA60/BB/거래량)
+- MA5(노랑), MA20(파랑), MA60(보라), 볼린저밴드 20일 2σ(회색 점선), 거래량 바(상승 초록/하락 빨강)
+- 원격 충돌 해소: 리모트에 차트 AI투자의견·가격알림 기능이 추가되어 있었음 — 두 세트 모두 보존
+
+**2. 52주 신고가/신저가 범위 바**
+- `/api/quote`, `/api/quotes` 응답에 `12. 52w_high`, `13. 52w_low` 추가 (yfinance `year_high/year_low`)
+- `Week52Bar` 컴포넌트 신규 작성 — 저가~현재가 채움 바 + 현재가 위치 도트
+- 도트 색상: 고가 70% 이상 초록, 저가 30% 이하 빨강, 중간 회색
+- `FavoriteCard`, `MobilePriceCard` 양쪽에 적용
+
+**3. 차트 투자의견 Gemini 경량화**
+- 문제: 종목 선택마다 `/api/analysis` 호출 → `_gemini_stock_analysis`가 투자의견 5문장 + 뉴스 기사별 4문장 요약 × 5개 생성 → 15~20초 소요
+- 원인: 차트는 `comment`만 표시하는데 뉴스레터용 `news_items`까지 함께 생성
+- 수정: `_gemini_chart_comment` 함수 분리 — 헤드라인만 참고해 2~3문장만 생성 → 3~5초로 단축
+- `_gemini_stock_analysis`(뉴스 요약 포함)는 뉴스레터 발송 전용으로 유지
+
+**결정사항**
+- 종목 가격 알림 기능: 일반 증권앱과 차별점 없다는 판단 → 보류. cron-job.org job 설정도 불필요
+
+---
+
 ### 2026-06-01 - Gemini 안정화, 수신해지, 관리자강제발송, 차트AI투자의견, 가격알림
 
 | 항목 | 내용 |
