@@ -364,17 +364,31 @@ def _gemini_chart_comment(name: str, symbol: str, change_pct, news_titles: list,
     if not api_key:
         return {"comment": "", "x_reaction": ""}
     headlines = "\n".join(f"- {t}" for t in news_titles[:5]) or "- 관련 뉴스 없음"
-    lang_note = "한국어" if is_korean else "한국어 또는 영어"
+    if is_korean:
+        search_instruction = (
+            f"Google 검색을 통해 '{name}' 관련 국내 투자자 반응을 찾아보세요.\n"
+            "아래 세 가지 쿼리 중 결과가 가장 풍부한 것을 사용하세요:\n"
+            f"1. '{name} site:finance.naver.com/item/board'\n"
+            f"2. '{name} site:cafe.naver.com 주식'\n"
+            f"3. '{name} 주식 투자자 반응'"
+        )
+        reaction_label = "국내 투자자 반응"
+    else:
+        search_instruction = (
+            f"Google 검색으로 '{symbol} site:x.com OR site:twitter.com' 를 검색해 "
+            "X(트위터)의 최신 투자자 반응을 찾아보세요."
+        )
+        reaction_label = "X 투자자 반응"
     prompt = (
         f"종목: {name} ({symbol}), 등락: {change_pct}\n"
         f"관련 뉴스 헤드라인:\n{headlines}\n\n"
-        f"Google 검색을 통해 X(트위터)에서 '{name}' 관련 최신 투자자 반응도 찾아보세요.\n\n"
+        f"{search_instruction}\n\n"
         "위 정보를 바탕으로 다음 두 항목을 작성해주세요:\n"
         "1. comment: 투자자 관점에서 오늘의 핵심 포인트를 2~3문장으로 작성\n"
-        "2. x_reaction: X 포스트에서 나타나는 투자자 반응·시장 심리를 1~2문장으로 요약 "
-        "(관련 포스트를 찾지 못한 경우 '관련 데이터 없음'으로 작성)\n\n"
+        f"2. x_reaction: 검색에서 찾은 {reaction_label}을 1~2문장으로 요약 "
+        "(유의미한 내용을 찾지 못한 경우 반드시 빈 문자열 \"\"로 작성)\n\n"
         "인용 번호([1], [2] 등)는 절대 포함하지 마세요.\n"
-        f"모든 응답은 {lang_note}로 작성하세요.\n"
+        "모든 응답은 한국어로 작성하세요.\n"
         '반드시 JSON 형식으로만 응답하세요: {"comment": "...", "x_reaction": "..."}'
     )
     client = google_genai.Client(api_key=api_key)
@@ -629,8 +643,9 @@ def _gemini_stock_analysis(stock_summaries: list, model: str = "gemini-2.5-flash
             f"   {j+1}) {n.get('title', '')}"
             for j, n in enumerate((item.get("news") or [])[:5])
         ) or "   1) 관련 뉴스 없음"
+        kind = "[국내]" if item.get("is_korean", True) else "[해외]"
         stocks_text += (
-            f"{i+1}. {item.get('name')} ({item.get('symbol')})\n"
+            f"{i+1}. {item.get('name')} ({item.get('symbol')}) {kind}\n"
             f"   등락: {change_pct}\n"
             f"   기사 목록:\n{news_list}\n\n"
         )
@@ -638,9 +653,15 @@ def _gemini_stock_analysis(stock_summaries: list, model: str = "gemini-2.5-flash
         f"아래 {len(stock_summaries)}개 종목 각각에 대해 세 가지를 작성해주세요.\n"
         "1. comment: 등락률과 뉴스를 종합해 투자자 관점에서 오늘의 상황을 분석하고 포인트·주의사항을 5문장으로 작성\n"
         "2. news_items: 각 기사를 4문장으로 개별 요약한 배열 (기사 순서 그대로, 핵심 내용과 배경을 구체적으로)\n"
-        "3. x_reaction: Google 검색으로 X(트위터)에서 해당 종목 관련 투자자 반응·시장 심리를 1~2문장으로 요약 "
-        "(관련 포스트를 찾지 못한 경우 '관련 데이터 없음'으로 작성)\n\n"
+        "3. x_reaction: Google 검색으로 투자자 반응을 찾아 1~2문장으로 요약\n"
+        "   [국내] 종목: 아래 3가지 쿼리 중 결과가 가장 풍부한 것 사용\n"
+        "     1) '{종목명} site:finance.naver.com/item/board'\n"
+        "     2) '{종목명} site:cafe.naver.com 주식'\n"
+        "     3) '{종목명} 주식 투자자 반응'\n"
+        "   [해외] 종목: '{티커} site:x.com OR site:twitter.com' 검색\n"
+        "   유의미한 내용을 찾지 못한 경우 반드시 빈 문자열 \"\"로 작성\n\n"
         "인용 번호([1], [2] 등)는 절대 포함하지 마세요.\n"
+        "모든 응답은 한국어로 작성하세요.\n"
         "형식: 반드시 JSON 배열로만 응답하세요. 다른 텍스트 없이.\n"
         '예시: [{"comment": "...", "news_items": ["기사1 요약", "기사2 요약"], "x_reaction": "..."}, ...]\n\n'
         f"종목 목록:\n{stocks_text}"
@@ -729,6 +750,7 @@ def _build_stock_digest(stock: dict) -> dict:
     return {
         "symbol": symbol,
         "name": name,
+        "is_korean": is_korean,
         "quote": quote,
         "news": news,
     }
@@ -778,12 +800,14 @@ def _build_digest_html(user_email: str, summaries: list, sent_at: datetime, uid:
         x_reaction = analysis.get("x_reaction", "")
         news_item_summaries = analysis.get("news_items", [])
 
+        is_korean_stock = item.get("is_korean", True)
+        reaction_label = "국내 투자자 반응" if is_korean_stock else "X 투자자 반응"
         x_reaction_html = ""
         if x_reaction and x_reaction != "관련 데이터 없음":
             x_reaction_html = f"""
           <div style="margin-top:8px;">
             <div style="padding:8px 14px;background:#fef3c7;border-left:3px solid #d97706;border-radius:0 6px 6px 0;font-size:13px;color:#92400e;line-height:1.7;">
-              📣 투자자 반응 (X 기반): {html.escape(x_reaction)}
+              📣 {html.escape(reaction_label)}: {html.escape(x_reaction)}
             </div>
           </div>"""
 

@@ -1065,7 +1065,7 @@ const ChartSection = ({ activeStock }) => {
                             </div>
                             {analysis.x_reaction && analysis.x_reaction !== '관련 데이터 없음' && (
                                 <div style={{marginTop:'0.4rem', padding:'0.65rem 1rem', background:'rgba(217,119,6,0.08)', borderLeft:'3px solid #d97706', borderRadius:'0 6px 6px 0', fontSize:'0.82rem', color:'#fcd34d', lineHeight:'1.7'}}>
-                                    📣 투자자 반응 (X 기반): {analysis.x_reaction}
+                                    📣 {activeStock?.isKorean !== false ? '국내 투자자 반응' : 'X 투자자 반응'}: {analysis.x_reaction}
                                 </div>
                             )}
                             <div style={{marginTop:'0.3rem', fontSize:'0.68rem', color:'var(--text-muted)'}}>※ AI가 생성한 참고 의견입니다. 투자 판단의 근거로 사용하지 마세요.</div>
