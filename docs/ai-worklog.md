@@ -77,15 +77,7 @@
 - 차트 하단 AI 투자의견 섹션 표시 (로딩/완료/오류 상태)
 - AI 참고 의견 면책 문구 포함
 
-**6. 종목 가격 알림**
-- `GET/POST/DELETE /api/alerts` — 알림 CRUD (Firebase Bearer 토큰 인증)
-- `POST /api/cron/price-check` — 가격 체크 & Resend 이메일 발송
-- Firestore `users/{uid}.priceAlerts` 배열에 저장
-- 차트 헤더 벨 아이콘 클릭 → 조건(이상/이하) + 목표가 설정
-- 알림 발동 시 `triggeredAt` 기록 (재발동 방지)
-- **미완**: cron-job.org에 `/api/cron/price-check` 30분 job 추가 필요
-
-**7. 도메인**
+**6. 도메인**
 - `ahdoyoon.site` Firebase Hosting 커스텀 도메인 연결 완료
 
 ---
