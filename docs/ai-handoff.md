@@ -40,6 +40,9 @@
 | 차트 투자의견 Gemini 경량화 | 완료 (2026-06-02) — 종목 선택 시 뉴스 요약 불필요하게 생성하던 문제 수정. _gemini_chart_comment 분리, 2~3문장만 생성 |
 | 회원가입 동의 체크박스 | 완료 (2026-06-03) — 이용약관·개인정보 수집 동의(필수), 뉴스레터 수신 동의(선택). consentAt/newsletterConsent Firestore 저장 |
 | 랜딩 페이지 | 완료 (2026-06-03) — 비로그인 첫 화면. 히어로(타이틀/서브타이틀/CTA) + 기능 소개 카드 4개 |
+| UI 개선 5종 | 완료 (2026-06-03) — 페이지 타이틀, 즐겨찾기 온보딩 패널, AI의견 위치 이동, 지표 툴팁, 카드 고정높이+모바일 2열 |
+| 버그 수정 (체크박스/마퀴) | 완료 (2026-06-03) — 체크박스 flex-shrink 추가, 마퀴 inline-block 전환으로 클리핑 수정 |
+| Gemini Google Search Grounding | 완료 (2026-06-03) — 투자자 반응 섹션. 국내: Naver 3-query, 해외: X/Twitter. x_reaction 필드 |
 
 ## 다음 작업 후보
 
@@ -91,7 +94,7 @@ bash scripts/post-deploy.sh
 | 날짜 | 2026-06-03 |
 | 작성자 | Claude Sonnet 4.6 |
 | 작업 환경 | Windows 11. 백엔드는 push → Render 자동배포. 프론트는 firebase deploy --only hosting. |
-| 내용 | ①종목 가격 알림 기능 코드/문서 제거(보류) ②회원가입 동의 체크박스(이용약관 필수·뉴스레터 선택, Firestore 저장) ③랜딩 페이지(히어로+기능 카드 4개) |
+| 내용 | ①UI 개선 5종(타이틀/온보딩/AI의견위치/툴팁/카드그리드) ②체크박스·마퀴 버그 수정 ③Gemini Google Search Grounding(국내 Naver, 해외 X/Twitter, x_reaction 필드) |
 | 다음 우선순위 | 포트폴리오 수익률 트래킹, 경제지표 캘린더, PWA 전환 |
-| Gemini 모델 현황 | 뉴스레터: 2.5-flash(20회/일), 차트투자의견: 2.0-flash(1500회/일), 폴백: 2.0-flash |
-| 주의 | gemini-1.5-flash는 이 계정 v1beta에서 404. 사용 금지. 종목 가격 알림 기능 보류(차별점 없음). |
+| Gemini 모델 현황 | 뉴스레터: 2.5-flash(20회/일), 차트투자의견: 2.0-flash(1500회/일), 폴백: 2.0-flash, Grounding: google_search tool |
+| 주의 | gemini-1.5-flash는 이 계정 v1beta에서 404. 사용 금지. 국내 종목 X 검색은 색인 없음 → Naver 3-query 사용. |

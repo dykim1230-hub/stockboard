@@ -11,6 +11,39 @@
 
 ## 로그
 
+### 2026-06-03 - UI 개선 5종, 버그 수정 2건, Gemini Google Search Grounding
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Sonnet 4.6 |
+| 변경 파일 | `index.html`, `style.css`, `main.py`, `docs/ai-handoff.md`, `docs/ai-worklog.md` |
+
+**1. UI 개선 5종**
+- 페이지 타이틀 변경: `MarketPulse — AI 주식 브리핑`
+- 즐겨찾기 비어있을 때 온보딩 패널 표시 (`.fav-onboarding`)
+- AI 투자의견 위치: 캔버스 아래 → 캔버스 위로 이동 (먼저 보이도록)
+- 기술지표 토글 버튼에 툴팁 추가 (`.indicator-tooltip`, hover/tap 표시)
+- 즐겨찾기 카드 `min-height: 155px` 고정, 모바일 2열 그리드 + 7번째 카드 중앙 정렬
+
+**2. 버그 수정 2건**
+- 체크박스 찌그러짐: `flex-shrink: 0; min-width: 16px` 추가, 16px 크기로 통일
+- 마퀴 클리핑: `.card-name-text`를 `display: inline-block; max-width: 100%`로 변경, hover 시 `max-width: none; overflow: visible`로 전환 (부모가 clip)
+
+**3. Gemini Google Search Grounding — 투자자 반응 섹션 추가**
+- `/api/analysis` 응답에 `x_reaction` 필드 추가
+- 국내 종목: Naver Finance 게시판 3-query 전략 (`site:finance.naver.com/item/board`, `site:cafe.naver.com 주식`, `{종목명} 주식 투자자 반응`) → 레이블 `📣 국내 투자자 반응`
+- 해외 종목: `{symbol} site:x.com OR site:twitter.com` → 레이블 `📣 X 투자자 반응`
+- 결과 없을 시 빈 문자열 `""` 반환 → 프론트 && 체크로 섹션 숨김
+- 인용 번호 제거: `re.sub(r'\[\d+\]', '', text)`
+- Grounding 실패 시 fallback: 일반 생성으로 전환 (try/except)
+- 뉴스레터 (`_build_stock_digest`, `_build_digest_html`)에도 동일 로직 반영
+
+**결정사항**
+- 국내 종목에서 X/Twitter 검색이 공란인 이유: Google이 한국어 X 콘텐츠를 색인하지 않음 → Naver 기반으로 전환
+- `x_reaction` 필드명 유지 (내부 키; 레이블은 프론트/메일에서 분기)
+
+---
+
 ### 2026-06-03 - 법적 고지 대응, 랜딩 페이지
 
 | 항목 | 내용 |
