@@ -367,29 +367,34 @@ def _gemini_chart_comment(name: str, symbol: str, change_pct, news_titles: list)
         '반드시 JSON 형식으로만 응답하세요: {"comment": "..."}'
     )
     client = google_genai.Client(api_key=api_key)
-    for attempt in range(3):
-        try:
-            response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-            text = _extract_gemini_text(response).strip()
-            if not text:
-                if attempt < 2:
-                    time.sleep(5)
-                continue
-            match = re.search(r'\{.*\}', text, re.DOTALL)
-            if match:
-                import json as _json
-                data = _json.loads(match.group())
-                return data.get("comment", "")
-        except Exception as e:
-            err_str = str(e)
-            is_retryable = (
-                "429" in err_str or "503" in err_str
-                or "rate" in err_str.lower() or "unavailable" in err_str.lower()
-            )
-            if is_retryable and attempt < 2:
-                time.sleep(10)
-                continue
-            break
+    models_to_try = ["gemini-2.0-flash", "gemini-2.5-flash"]
+    for model in models_to_try:
+        for attempt in range(3):
+            try:
+                response = client.models.generate_content(model=model, contents=prompt)
+                text = _extract_gemini_text(response).strip()
+                if not text:
+                    print(f"_gemini_chart_comment: empty response (model={model}, attempt={attempt+1})")
+                    if attempt < 2:
+                        time.sleep(5)
+                    continue
+                match = re.search(r'\{.*\}', text, re.DOTALL)
+                if match:
+                    import json as _json
+                    data = _json.loads(match.group())
+                    return data.get("comment", "")
+                print(f"_gemini_chart_comment: no JSON found (model={model}, attempt={attempt+1}): {text[:100]}")
+            except Exception as e:
+                err_str = str(e)
+                print(f"_gemini_chart_comment error (model={model}, attempt={attempt+1}): {err_str[:200]}")
+                is_retryable = (
+                    "429" in err_str or "503" in err_str
+                    or "rate" in err_str.lower() or "unavailable" in err_str.lower()
+                )
+                if is_retryable and attempt < 2:
+                    time.sleep(10)
+                    continue
+                break
     return ""
 
 
