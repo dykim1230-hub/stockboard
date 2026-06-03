@@ -1447,24 +1447,31 @@ const App = () => {
                         ))}
                     </div>
                 </div>
-            ) : favorites.length > 0 ? (
+            ) : (
                 <>
                     {!isMobile && (
                         <div className="favorites-container">
-                            {favorites.map(fav => (
-                                <FavoriteCard
-                                    key={fav.symbol}
-                                    favorite={fav}
-                                    isActive={activeStock?.symbol === fav.symbol}
-                                    onClick={setActiveStock}
-                                    onToggle={toggleFavorite}
-                                    quote={quotes[fav.symbol] || null}
-                                    quotesLoading={quotesLoading}
-                                />
-                            ))}
+                            {Array.from({length: 7}, (_, i) => {
+                                const fav = favorites[i];
+                                return fav ? (
+                                    <FavoriteCard
+                                        key={fav.symbol}
+                                        favorite={fav}
+                                        isActive={activeStock?.symbol === fav.symbol}
+                                        onClick={setActiveStock}
+                                        onToggle={toggleFavorite}
+                                        quote={quotes[fav.symbol] || null}
+                                        quotesLoading={quotesLoading}
+                                    />
+                                ) : (
+                                    <div key={`empty-${i}`} className="glass-panel favorite-card-empty" onClick={() => setIsSearchOpen(true)}>
+                                        <span className="material-symbols-outlined" style={{fontSize:'1.6rem', color:'var(--text-muted)', opacity:0.35}}>add</span>
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
-                    {isMobile && (
+                    {isMobile && favorites.length > 0 && (
                         <div className="mobile-stock-selector">
                             <CustomSelect
                                 options={favorites.map(f => ({
@@ -1485,11 +1492,12 @@ const App = () => {
                             />
                         </div>
                     )}
+                    {isMobile && favorites.length === 0 && (
+                        <div className="glass-panel" style={{padding: '2rem', textAlign: 'center', marginBottom: '2rem', color: 'var(--text-muted)'}}>
+                            즐겨찾기된 종목이 없습니다. 우측 상단의 '종목 검색' 버튼을 눌러 추가해주세요.
+                        </div>
+                    )}
                 </>
-            ) : (
-                <div className="glass-panel" style={{padding: '2rem', textAlign: 'center', marginBottom: '2rem', color: 'var(--text-muted)'}}>
-                    즐겨찾기된 종목이 없습니다. 우측 상단의 '종목 검색' 버튼을 눌러 추가해주세요.
-                </div>
             )}
 
             {favLimitMsg && (

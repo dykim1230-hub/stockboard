@@ -104,36 +104,36 @@ body {
 
 /* Favorites Cards */
 .favorites-container {
-    display: flex;
-    gap: 1rem;
-    overflow-x: auto;
-    padding-bottom: 1rem;
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.75rem;
     margin-bottom: 2rem;
-    scroll-snap-type: x proximity;
-    -webkit-overflow-scrolling: touch;
-}
-
-/* Hide scrollbar for aesthetics but keep functionality */
-.favorites-container::-webkit-scrollbar {
-    height: 6px;
-}
-.favorites-container::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 4px;
-}
-.favorites-container::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
 }
 
 .favorite-card {
-    min-width: 210px;
-    padding: 1.25rem;
+    padding: 1rem;
     cursor: pointer;
     transition: all var(--transition-normal);
     position: relative;
     border: 1px solid var(--border-color);
-    scroll-snap-align: start;
+    min-width: 0;
+}
+
+.favorite-card-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 1px dashed rgba(255,255,255,0.1) !important;
+    background: rgba(255,255,255,0.02) !important;
+    min-height: 130px;
+    border-radius: var(--radius-lg);
+    transition: all var(--transition-normal);
+}
+
+.favorite-card-empty:hover {
+    border-color: rgba(255,255,255,0.25) !important;
+    background: rgba(255,255,255,0.05) !important;
 }
 
 .favorite-card:hover {
@@ -159,6 +159,19 @@ body {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.card-symbol > div {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.card-symbol > div > div {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Custom Checkbox */
@@ -1028,14 +1041,12 @@ body {
     }
 
     .favorites-container {
-        gap: 0.75rem;
-        margin: 0 -1rem 1.25rem;
-        padding: 0 1rem 1rem;
+        gap: 0.5rem;
+        margin-bottom: 1.25rem;
     }
 
     .favorite-card {
-        min-width: min(76vw, 240px);
-        padding: 1rem;
+        padding: 0.75rem;
         border-radius: 12px;
     }
 
@@ -1199,7 +1210,7 @@ body {
     }
 
     .favorite-card {
-        min-width: 82vw;
+        padding: 0.6rem;
     }
 
     .chart-container {
