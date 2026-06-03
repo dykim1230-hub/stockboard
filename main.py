@@ -20,6 +20,7 @@ import re
 import hmac
 import hashlib
 from google import genai as google_genai
+from google.genai import types as genai_types
 
 # ── Firebase Admin ─────────────────────────────────────────
 import firebase_admin
@@ -355,24 +356,47 @@ def get_news(
     return result
 
 
-def _gemini_chart_comment(name: str, symbol: str, change_pct, news_titles: list) -> str:
+def _gemini_chart_comment(name: str, symbol: str, change_pct, news_titles: list, is_korean: bool = True) -> dict:
+    """투자의견 + X 투자자 반응을 반환한다.
+    반환: {"comment": "...", "x_reaction": "..."}
+    """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        return ""
+        return {"comment": "", "x_reaction": ""}
     headlines = "\n".join(f"- {t}" for t in news_titles[:5]) or "- 관련 뉴스 없음"
+    lang_note = "한국어" if is_korean else "한국어 또는 영어"
     prompt = (
         f"종목: {name} ({symbol}), 등락: {change_pct}\n"
         f"관련 뉴스 헤드라인:\n{headlines}\n\n"
-        "위 정보를 바탕으로 투자자 관점에서 오늘의 핵심 포인트를 2~3문장으로 작성해주세요.\n"
-        '반드시 JSON 형식으로만 응답하세요: {"comment": "..."}'
+        f"Google 검색을 통해 X(트위터)에서 '{name}' 관련 최신 투자자 반응도 찾아보세요.\n\n"
+        "위 정보를 바탕으로 다음 두 항목을 작성해주세요:\n"
+        "1. comment: 투자자 관점에서 오늘의 핵심 포인트를 2~3문장으로 작성\n"
+        "2. x_reaction: X 포스트에서 나타나는 투자자 반응·시장 심리를 1~2문장으로 요약 "
+        "(관련 포스트를 찾지 못한 경우 '관련 데이터 없음'으로 작성)\n\n"
+        "인용 번호([1], [2] 등)는 절대 포함하지 마세요.\n"
+        f"모든 응답은 {lang_note}로 작성하세요.\n"
+        '반드시 JSON 형식으로만 응답하세요: {"comment": "...", "x_reaction": "..."}'
     )
     client = google_genai.Client(api_key=api_key)
+    # Search Grounding 활성화
+    try:
+        grounding_config = genai_types.GenerateContentConfig(
+            tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())]
+        )
+    except Exception:
+        grounding_config = None
+
     models_to_try = ["gemini-2.0-flash", "gemini-2.5-flash"]
     for model in models_to_try:
         for attempt in range(3):
             try:
-                response = client.models.generate_content(model=model, contents=prompt)
+                kwargs = {"model": model, "contents": prompt}
+                if grounding_config:
+                    kwargs["config"] = grounding_config
+                response = client.models.generate_content(**kwargs)
                 text = _extract_gemini_text(response).strip()
+                # 인용 번호 제거
+                text = re.sub(r'\[\d+\]', '', text)
                 if not text:
                     print(f"_gemini_chart_comment: empty response (model={model}, attempt={attempt+1})")
                     if attempt < 2:
@@ -380,9 +404,11 @@ def _gemini_chart_comment(name: str, symbol: str, change_pct, news_titles: list)
                     continue
                 match = re.search(r'\{.*\}', text, re.DOTALL)
                 if match:
-                    import json as _json
-                    data = _json.loads(match.group())
-                    return data.get("comment", "")
+                    data = json.loads(match.group())
+                    return {
+                        "comment": data.get("comment", ""),
+                        "x_reaction": data.get("x_reaction", ""),
+                    }
                 print(f"_gemini_chart_comment: no JSON found (model={model}, attempt={attempt+1}): {text[:100]}")
             except Exception as e:
                 err_str = str(e)
@@ -395,7 +421,7 @@ def _gemini_chart_comment(name: str, symbol: str, change_pct, news_titles: list)
                     time.sleep(10)
                     continue
                 break
-    return ""
+    return {"comment": "", "x_reaction": ""}
 
 
 @app.get("/api/analysis")
@@ -414,8 +440,10 @@ def get_analysis(
     news = _google_news_rss(name or symbol, is_korean)[:5]
     news_titles = [n.get("title", "") for n in news]
 
-    comment = _gemini_chart_comment(name or symbol, symbol, change_pct, news_titles)
-    result = {"comment": comment, "news_items": []}
+    analysis = _gemini_chart_comment(name or symbol, symbol, change_pct, news_titles, is_korean)
+    comment = analysis.get("comment", "")
+    x_reaction = analysis.get("x_reaction", "")
+    result = {"comment": comment, "x_reaction": x_reaction, "news_items": []}
     if comment:
         _set_cache(cache_key, result, ttl=1800)
     return result
@@ -607,13 +635,24 @@ def _gemini_stock_analysis(stock_summaries: list, model: str = "gemini-2.5-flash
             f"   기사 목록:\n{news_list}\n\n"
         )
     prompt = (
-        f"아래 {len(stock_summaries)}개 종목 각각에 대해 두 가지를 작성해주세요.\n"
+        f"아래 {len(stock_summaries)}개 종목 각각에 대해 세 가지를 작성해주세요.\n"
         "1. comment: 등락률과 뉴스를 종합해 투자자 관점에서 오늘의 상황을 분석하고 포인트·주의사항을 5문장으로 작성\n"
-        "2. news_items: 각 기사를 4문장으로 개별 요약한 배열 (기사 순서 그대로, 핵심 내용과 배경을 구체적으로)\n\n"
+        "2. news_items: 각 기사를 4문장으로 개별 요약한 배열 (기사 순서 그대로, 핵심 내용과 배경을 구체적으로)\n"
+        "3. x_reaction: Google 검색으로 X(트위터)에서 해당 종목 관련 투자자 반응·시장 심리를 1~2문장으로 요약 "
+        "(관련 포스트를 찾지 못한 경우 '관련 데이터 없음'으로 작성)\n\n"
+        "인용 번호([1], [2] 등)는 절대 포함하지 마세요.\n"
         "형식: 반드시 JSON 배열로만 응답하세요. 다른 텍스트 없이.\n"
-        '예시: [{"comment": "...", "news_items": ["기사1 요약", "기사2 요약"]}, ...]\n\n'
+        '예시: [{"comment": "...", "news_items": ["기사1 요약", "기사2 요약"], "x_reaction": "..."}, ...]\n\n'
         f"종목 목록:\n{stocks_text}"
     )
+
+    # Search Grounding 활성화
+    try:
+        grounding_config = genai_types.GenerateContentConfig(
+            tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())]
+        )
+    except Exception:
+        grounding_config = None
 
     # 0~1번: 지정 모델, 2번 이후: gemini-2.0-flash 폴백
     fallback_model = "gemini-2.0-flash"
@@ -623,8 +662,11 @@ def _gemini_stock_analysis(stock_summaries: list, model: str = "gemini-2.5-flash
         if attempt == 2 and model != fallback_model:
             print(f"Gemini stock analysis: switching to {fallback_model} fallback")
         try:
-            response = client.models.generate_content(model=current_model, contents=prompt)
-            text = _extract_gemini_text(response).strip()
+            gen_kwargs = {"model": current_model, "contents": prompt}
+            if grounding_config:
+                gen_kwargs["config"] = grounding_config
+            response = client.models.generate_content(**gen_kwargs)
+            text = re.sub(r'\[\d+\]', '', _extract_gemini_text(response)).strip()
             if not text:
                 print(f"Gemini stock analysis: empty response (attempt {attempt+1}, model={current_model})")
                 if attempt < max_attempts - 1:
@@ -733,7 +775,17 @@ def _build_digest_html(user_email: str, summaries: list, sent_at: datetime, uid:
 
         analysis = analyses[i] if i < len(analyses) else {}
         comment = analysis.get("comment", "")
+        x_reaction = analysis.get("x_reaction", "")
         news_item_summaries = analysis.get("news_items", [])
+
+        x_reaction_html = ""
+        if x_reaction and x_reaction != "관련 데이터 없음":
+            x_reaction_html = f"""
+          <div style="margin-top:8px;">
+            <div style="padding:8px 14px;background:#fef3c7;border-left:3px solid #d97706;border-radius:0 6px 6px 0;font-size:13px;color:#92400e;line-height:1.7;">
+              📣 투자자 반응 (X 기반): {html.escape(x_reaction)}
+            </div>
+          </div>"""
 
         comment_html = f"""
           <div style="margin-top:14px;">
@@ -741,6 +793,7 @@ def _build_digest_html(user_email: str, summaries: list, sent_at: datetime, uid:
             <div style="padding:10px 14px;background:#f0f9ff;border-left:3px solid #2563eb;border-radius:0 6px 6px 0;font-size:13px;color:#1e40af;line-height:1.7;">
               📌 {html.escape(comment)}
             </div>
+            {x_reaction_html}
           </div>""" if comment else ""
 
         news_items = item.get("news") or []
