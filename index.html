@@ -1408,19 +1408,44 @@ const App = () => {
             <MarketOverview />
 
             {!user ? (
-                <div className="glass-panel login-cta">
-                    <div className="login-cta-icon">
-                        <span className="material-symbols-outlined">monitoring</span>
+                <div className="landing-page">
+                    <div className="landing-hero glass-panel">
+                        <div className="landing-badge">
+                            <span className="material-symbols-outlined">auto_awesome</span>
+                            AI 기반 주식 대시보드
+                        </div>
+                        <h1 className="landing-title">MarketPulse</h1>
+                        <p className="landing-subtitle">
+                            관심 종목의 시세·차트·뉴스를 한 화면에서.<br/>
+                            매일 AI가 분석한 뉴스레터를 이메일로 받아보세요.
+                        </p>
+                        <div className="landing-actions">
+                            <button className="btn landing-cta-btn" onClick={() => setIsAuthOpen(true)}>
+                                <span className="material-symbols-outlined">rocket_launch</span>
+                                무료로 시작하기
+                            </button>
+                            <button className="btn landing-login-btn" onClick={() => setIsAuthOpen(true)}>
+                                <span className="material-symbols-outlined">login</span>
+                                로그인
+                            </button>
+                        </div>
                     </div>
-                    <h2 className="login-cta-title">실시간 주식 대시보드</h2>
-                    <p className="login-cta-desc">
-                        관심 종목의 현재가·차트·뉴스를 한 화면에서 확인하세요.<br/>
-                        매일 원하는 시간에 이메일 요약을 받아볼 수 있습니다.
-                    </p>
-                    <button className="btn login-cta-btn" onClick={() => setIsAuthOpen(true)}>
-                        <span className="material-symbols-outlined">login</span>
-                        로그인 / 회원가입
-                    </button>
+                    <div className="landing-features">
+                        {[
+                            { icon: 'monitoring', title: '실시간 시세', desc: '국내·해외 관심 종목의 현재가, 등락률, 52주 범위를 한눈에 확인' },
+                            { icon: 'candlestick_chart', title: '기술 지표 차트', desc: 'MA5/MA20/MA60, 볼린저밴드, 거래량 바를 지원하는 인터랙티브 차트' },
+                            { icon: 'smart_toy', title: 'AI 투자 의견', desc: 'Gemini AI가 최신 뉴스를 바탕으로 종목별 투자 의견을 실시간 분석' },
+                            { icon: 'mark_email_read', title: '이메일 다이제스트', desc: '매일 원하는 시간에 AI가 요약한 관심 종목 뉴스레터 자동 발송' },
+                        ].map(f => (
+                            <div key={f.icon} className="landing-feature-card glass-panel">
+                                <div className="landing-feature-icon">
+                                    <span className="material-symbols-outlined">{f.icon}</span>
+                                </div>
+                                <h3 className="landing-feature-title">{f.title}</h3>
+                                <p className="landing-feature-desc">{f.desc}</p>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             ) : favorites.length > 0 ? (
                 <>

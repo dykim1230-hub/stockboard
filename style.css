@@ -692,50 +692,127 @@ body {
     gap: 0.05rem;
 }
 
-/* Login CTA */
-.login-cta {
-    padding: 3.5rem 2rem;
-    text-align: center;
+/* Landing Page */
+.landing-page {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
     margin-bottom: 2rem;
 }
 
-.login-cta-icon {
-    width: 68px;
-    height: 68px;
+.landing-hero {
+    padding: 4rem 2rem 3.5rem;
+    text-align: center;
+}
+
+.landing-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
     background: rgba(59, 130, 246, 0.12);
     border: 1px solid rgba(59, 130, 246, 0.3);
-    border-radius: 50%;
+    color: var(--accent-color);
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    margin-bottom: 1.5rem;
+}
+
+.landing-badge .material-symbols-outlined {
+    font-size: 1rem;
+}
+
+.landing-title {
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: -0.03em;
+    margin-bottom: 1rem;
+    background: linear-gradient(135deg, #fff 40%, var(--accent-color));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.landing-subtitle {
+    font-size: 1rem;
+    color: var(--text-muted);
+    line-height: 1.9;
+    max-width: 460px;
+    margin: 0 auto 2rem;
+}
+
+.landing-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.landing-cta-btn {
+    padding: 0.85rem 2rem !important;
+    font-size: 0.95rem !important;
+    background: var(--accent-color) !important;
+}
+
+.landing-login-btn {
+    padding: 0.85rem 2rem !important;
+    font-size: 0.95rem !important;
+    background: transparent !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+.landing-features {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+}
+
+.landing-feature-card {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.landing-feature-icon {
+    width: 44px;
+    height: 44px;
+    background: rgba(59, 130, 246, 0.1);
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto 1.25rem;
 }
 
-.login-cta-icon .material-symbols-outlined {
-    font-size: 2rem;
+.landing-feature-icon .material-symbols-outlined {
+    font-size: 1.4rem;
     color: var(--accent-color);
 }
 
-.login-cta-title {
-    font-size: 1.5rem;
-    font-weight: 700;
+.landing-feature-title {
+    font-size: 0.95rem;
+    font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 0.75rem;
 }
 
-.login-cta-desc {
-    font-size: 0.9rem;
+.landing-feature-desc {
+    font-size: 0.82rem;
     color: var(--text-muted);
-    line-height: 1.8;
-    margin-bottom: 1.75rem;
-    max-width: 420px;
-    margin-left: auto;
-    margin-right: auto;
+    line-height: 1.7;
 }
 
-.login-cta-btn {
-    padding: 0.85rem 2.5rem !important;
-    font-size: 1rem !important;
+@media (max-width: 600px) {
+    .landing-title {
+        font-size: 2.1rem;
+    }
+    .landing-features {
+        grid-template-columns: 1fr;
+    }
+    .landing-hero {
+        padding: 2.5rem 1.25rem 2rem;
+    }
 }
 
 /* Desktop 2-column layout */
