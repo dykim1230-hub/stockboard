@@ -178,13 +178,20 @@ body {
 /* Card name marquee */
 .card-name-wrap {
     overflow: hidden;
+    white-space: nowrap;
+    position: relative;
+    max-width: 100%;
     min-width: 0;
+    /* override inherited text-overflow from .card-symbol > div > div */
+    text-overflow: clip;
 }
 .card-name-text {
-    display: block;
+    display: inline-block;
     white-space: nowrap;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
+    vertical-align: top;
 }
 @keyframes card-name-scroll {
     0%, 10% { transform: translateX(0); }
@@ -192,6 +199,8 @@ body {
 }
 .card-name-wrap:hover .card-name-text.overflows,
 .card-name-text.overflows.tapped {
+    max-width: none;
+    overflow: visible;
     text-overflow: clip;
     animation: card-name-scroll 2.5s ease-in-out forwards;
 }
@@ -212,8 +221,10 @@ body {
 .custom-checkbox {
     appearance: none;
     -webkit-appearance: none;
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    flex-shrink: 0;
     border: 2px solid var(--text-muted);
     border-radius: 4px;
     background: transparent;
@@ -231,9 +242,9 @@ body {
     content: '';
     position: absolute;
     top: 2px;
-    left: 6px;
-    width: 4px;
-    height: 10px;
+    left: 5px;
+    width: 3px;
+    height: 8px;
     border: solid white;
     border-width: 0 2px 2px 0;
     transform: rotate(45deg);

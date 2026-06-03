@@ -721,8 +721,9 @@ const FavoriteCard = ({ favorite, isActive, onClick, onToggle, quote, quotesLoad
 
     useEffect(() => {
         const wrap = nameWrapRef.current;
-        if (!wrap || !wrap.firstChild) return;
-        const delta = wrap.firstChild.scrollWidth - wrap.offsetWidth;
+        const span = wrap?.firstElementChild;
+        if (!wrap || !span) return;
+        const delta = span.scrollWidth - wrap.offsetWidth;
         setScrollDelta(delta > 0 ? delta + 4 : 0);
     }, [favorite.name]);
 
