@@ -794,8 +794,6 @@ const ChartSection = ({ activeStock }) => {
     const [timeframe, setTimeframe] = useState('1M');
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
-    const [analysis, setAnalysis] = useState(null);
-    const [analysisLoading, setAnalysisLoading] = useState(false);
     const [indicators, setIndicators] = useState({ ma5: false, ma20: false, ma60: false, bb: false, vol: false });
     const [activeTip, setActiveTip] = useState(null);
     const tipTimerRef = useRef(null);
@@ -806,17 +804,6 @@ const ChartSection = ({ activeStock }) => {
         clearTimeout(tipTimerRef.current);
         tipTimerRef.current = setTimeout(() => setActiveTip(null), 1500);
     };
-
-    useEffect(() => {
-        if (!activeStock) { setAnalysis(null); return; }
-        setAnalysis(null);
-        setAnalysisLoading(true);
-        fetch(`${BASE_URL}/analysis?symbol=${encodeURIComponent(activeStock.symbol)}&name=${encodeURIComponent(activeStock.name)}&is_korean=${activeStock.isKorean !== false}`)
-            .then(r => r.json())
-            .then(d => setAnalysis(d.comment ? d : null))
-            .catch(() => setAnalysis(null))
-            .finally(() => setAnalysisLoading(false));
-    }, [activeStock?.symbol]);
 
     useEffect(() => {
         if (!activeStock) return;
@@ -1302,6 +1289,133 @@ const MobilePriceCard = ({ stock, quote, quotesLoading }) => {
     );
 };
 
+const ContactModal = ({ isOpen, onClose }) => {
+    const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
+    const [status, setStatus] = useState('idle'); // idle | loading | success | error
+    const [errorMsg, setErrorMsg] = useState('');
+
+    useEffect(() => {
+        if (!isOpen) {
+            setForm({ name: '', email: '', subject: '', message: '' });
+            setStatus('idle');
+            setErrorMsg('');
+        }
+    }, [isOpen]);
+
+    const handleChange = (e) => setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setStatus('loading');
+        setErrorMsg('');
+        try {
+            const res = await fetch(`${BASE_URL}/contact`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(form),
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.detail || '발송에 실패했습니다.');
+            }
+            setStatus('success');
+        } catch (err) {
+            setErrorMsg(err.message);
+            setStatus('error');
+        }
+    };
+
+    if (!isOpen) return null;
+
+    const inputStyle = {
+        width: '100%', padding: '0.6rem 0.75rem', background: 'rgba(255,255,255,0.05)',
+        border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px',
+        color: 'var(--text-primary)', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box',
+    };
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '480px'}}>
+                <div className="modal-header">
+                    <h2 className="modal-title">관리자에게 문의하기</h2>
+                    <button className="close-btn" onClick={onClose}>
+                        <span className="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <div className="modal-body">
+                    {status === 'success' ? (
+                        <div style={{textAlign:'center', padding:'2rem 0'}}>
+                            <span className="material-symbols-outlined" style={{fontSize:'2.5rem', color:'#4ade80', display:'block', marginBottom:'0.75rem'}}>check_circle</span>
+                            <p style={{color:'var(--text-primary)', fontSize:'1rem', marginBottom:'0.5rem'}}>문의가 전송되었습니다.</p>
+                            <p style={{color:'var(--text-muted)', fontSize:'0.85rem'}}>빠른 시일 내에 답변 드리겠습니다.</p>
+                            <button className="btn-primary" style={{marginTop:'1.5rem'}} onClick={onClose}>닫기</button>
+                        </div>
+                    ) : (
+                        <form onSubmit={handleSubmit} style={{display:'flex', flexDirection:'column', gap:'0.75rem'}}>
+                            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem'}}>
+                                <div>
+                                    <label style={{fontSize:'0.75rem', color:'var(--text-muted)', display:'block', marginBottom:'0.3rem'}}>이름 *</label>
+                                    <input name="name" value={form.name} onChange={handleChange} required style={inputStyle} placeholder="홍길동" />
+                                </div>
+                                <div>
+                                    <label style={{fontSize:'0.75rem', color:'var(--text-muted)', display:'block', marginBottom:'0.3rem'}}>이메일 *</label>
+                                    <input name="email" type="email" value={form.email} onChange={handleChange} required style={inputStyle} placeholder="example@email.com" />
+                                </div>
+                            </div>
+                            <div>
+                                <label style={{fontSize:'0.75rem', color:'var(--text-muted)', display:'block', marginBottom:'0.3rem'}}>제목 *</label>
+                                <input name="subject" value={form.subject} onChange={handleChange} required style={inputStyle} placeholder="문의 제목을 입력해주세요" />
+                            </div>
+                            <div>
+                                <label style={{fontSize:'0.75rem', color:'var(--text-muted)', display:'block', marginBottom:'0.3rem'}}>내용 * (최대 2000자)</label>
+                                <textarea name="message" value={form.message} onChange={handleChange} required rows={6}
+                                    style={{...inputStyle, resize:'vertical', lineHeight:'1.6'}}
+                                    placeholder="문의 내용을 입력해주세요" maxLength={2000} />
+                                <div style={{textAlign:'right', fontSize:'0.72rem', color:'var(--text-muted)', marginTop:'0.25rem'}}>{form.message.length}/2000</div>
+                            </div>
+                            {status === 'error' && (
+                                <div style={{color:'#ef4444', fontSize:'0.85rem', padding:'0.5rem 0.75rem', background:'rgba(239,68,68,0.1)', borderRadius:'6px'}}>
+                                    {errorMsg}
+                                </div>
+                            )}
+                            <button type="submit" className="btn-primary" disabled={status === 'loading'}
+                                style={{display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem'}}>
+                                {status === 'loading' ? (
+                                    <><div className="spinner" style={{width:'14px', height:'14px', borderWidth:'2px'}}></div>전송 중...</>
+                                ) : '문의 보내기'}
+                            </button>
+                        </form>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const Footer = ({ onContactClick }) => (
+    <footer style={{
+        marginTop: '3rem', padding: '1.5rem 0', borderTop: '1px solid rgba(255,255,255,0.06)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem',
+    }}>
+        <span style={{fontSize:'0.78rem', color:'var(--text-muted)'}}>
+            © 2025 MarketPulse · 투자 정보는 참고용이며 투자 판단의 근거로 사용하지 마세요.
+        </span>
+        <button onClick={onContactClick}
+            style={{
+                display:'flex', alignItems:'center', gap:'0.4rem',
+                background:'transparent', border:'1px solid rgba(255,255,255,0.15)',
+                borderRadius:'8px', padding:'0.4rem 0.9rem', cursor:'pointer',
+                color:'var(--text-muted)', fontSize:'0.8rem', transition:'all 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(255,255,255,0.35)'; e.currentTarget.style.color='var(--text-primary)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(255,255,255,0.15)'; e.currentTarget.style.color='var(--text-muted)'; }}
+        >
+            <span className="material-symbols-outlined" style={{fontSize:'16px'}}>mail</span>
+            관리자에게 문의하기
+        </button>
+    </footer>
+);
+
 const App = () => {
     const [favorites, setFavorites] = useState([]);
     const [activeStock, setActiveStock] = useState(null);
@@ -1311,6 +1425,7 @@ const App = () => {
     const [isAuthOpen, setIsAuthOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [isAdminOpen, setIsAdminOpen] = useState(false);
+    const [isContactOpen, setIsContactOpen] = useState(false);
     const [user, setUser] = useState(null);
     const [isAdmin, setIsAdmin] = useState(false);
     const [authLoading, setAuthLoading] = useState(true);
@@ -1529,6 +1644,8 @@ const App = () => {
                 <NewsSection activeStock={activeStock} />
             </div>
 
+            <Footer onContactClick={() => setIsContactOpen(true)} />
+
             <AuthModal
                 isOpen={isAuthOpen}
                 onClose={() => setIsAuthOpen(false)}
@@ -1548,6 +1665,10 @@ const App = () => {
                 onClose={() => setIsSearchOpen(false)}
                 favorites={favorites}
                 toggleFavorite={toggleFavorite}
+            />
+            <ContactModal
+                isOpen={isContactOpen}
+                onClose={() => setIsContactOpen(false)}
             />
         </div>
     );

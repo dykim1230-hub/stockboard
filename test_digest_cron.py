@@ -46,7 +46,7 @@ class DigestCronTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), expected)
-        run_job.assert_called_once_with(dry_run=True, include_details=False)
+        run_job.assert_called_once_with(dry_run=True, include_details=False, force=False)
 
     def test_include_details_is_forwarded_to_digest_job(self):
         expected = {
@@ -67,7 +67,7 @@ class DigestCronTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), expected)
-        run_job.assert_called_once_with(dry_run=True, include_details=True)
+        run_job.assert_called_once_with(dry_run=True, include_details=True, force=False)
 
     def test_parse_digest_hour_accepts_only_0_to_23(self):
         self.assertEqual(main._parse_digest_hour("0"), 0)

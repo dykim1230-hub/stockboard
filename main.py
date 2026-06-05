@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-from fastapi import FastAPI, Query, Header, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Query, Header, HTTPException, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import yfinance as yf
 import requests
@@ -336,6 +337,61 @@ def get_chart(symbol: str = Query(...)):
 
 
 # ── 뉴스 ──────────────────────────────────────────────────
+# ── Contact Form ───────────────────────────────────────────
+
+_contact_rate: dict[str, list] = {}
+_CONTACT_LIMIT = 3
+_CONTACT_WINDOW = 600  # 10분
+
+def _contact_rate_ok(ip: str) -> bool:
+    now = time.time()
+    hits = [t for t in _contact_rate.get(ip, []) if now - t < _CONTACT_WINDOW]
+    _contact_rate[ip] = hits
+    if len(hits) >= _CONTACT_LIMIT:
+        return False
+    _contact_rate[ip].append(now)
+    return True
+
+class ContactRequest(BaseModel):
+    name: str
+    email: str
+    subject: str
+    message: str
+
+@app.post("/api/contact")
+def submit_contact(payload: ContactRequest, request: Request):
+    ip = request.client.host
+    if not _contact_rate_ok(ip):
+        raise HTTPException(status_code=429, detail="잠시 후 다시 시도해주세요.")
+    if not payload.name.strip() or not payload.message.strip():
+        raise HTTPException(status_code=422, detail="이름과 내용을 입력해주세요.")
+    if len(payload.message) > 2000:
+        raise HTTPException(status_code=422, detail="내용은 2000자 이하로 작성해주세요.")
+
+    admin_email = os.environ.get("CONTACT_ADMIN_EMAIL") or os.environ.get("MAIL_FROM")
+    if not admin_email:
+        raise HTTPException(status_code=503, detail="메일 설정이 되어 있지 않습니다.")
+
+    import html as _html
+    body_html = f"""
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111;">
+      <h2 style="margin:0 0 16px;font-size:18px;">MarketPulse 문의</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:14px;">
+        <tr><td style="padding:8px 0;color:#6b7280;width:80px;">이름</td><td style="padding:8px 0;">{_html.escape(payload.name)}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280;">이메일</td><td style="padding:8px 0;">{_html.escape(payload.email)}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280;">제목</td><td style="padding:8px 0;">{_html.escape(payload.subject)}</td></tr>
+      </table>
+      <div style="margin-top:16px;padding:16px;background:#f9fafb;border-radius:8px;font-size:14px;line-height:1.7;white-space:pre-wrap;">{_html.escape(payload.message)}</div>
+    </div>"""
+
+    try:
+        _send_resend_email(admin_email, f"[MarketPulse 문의] {payload.subject}", body_html)
+    except Exception as e:
+        print(f"Contact send error: {e}")
+        raise HTTPException(status_code=502, detail="메일 발송에 실패했습니다. 잠시 후 다시 시도해주세요.")
+    return {"ok": True}
+
+
 @app.get("/api/news")
 def get_news(
     stock_name: str = Query(...),
@@ -356,111 +412,6 @@ def get_news(
     return result
 
 
-def _gemini_chart_comment(name: str, symbol: str, change_pct, news_titles: list, is_korean: bool = True) -> dict:
-    """투자의견 + X 투자자 반응을 반환한다.
-    반환: {"comment": "...", "x_reaction": "..."}
-    """
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        return {"comment": "", "x_reaction": ""}
-    headlines = "\n".join(f"- {t}" for t in news_titles[:5]) or "- 관련 뉴스 없음"
-    if is_korean:
-        search_instruction = (
-            f"Google 검색을 통해 '{name}' 관련 국내 투자자 반응을 찾아보세요.\n"
-            "아래 세 가지 쿼리 중 결과가 가장 풍부한 것을 사용하세요:\n"
-            f"1. '{name} site:finance.naver.com/item/board'\n"
-            f"2. '{name} site:cafe.naver.com 주식'\n"
-            f"3. '{name} 주식 투자자 반응'"
-        )
-        reaction_label = "국내 투자자 반응"
-    else:
-        search_instruction = (
-            f"Google 검색으로 '{symbol} site:x.com OR site:twitter.com' 를 검색해 "
-            "X(트위터)의 최신 투자자 반응을 찾아보세요."
-        )
-        reaction_label = "X 투자자 반응"
-    prompt = (
-        f"종목: {name} ({symbol}), 등락: {change_pct}\n"
-        f"관련 뉴스 헤드라인:\n{headlines}\n\n"
-        f"{search_instruction}\n\n"
-        "위 정보를 바탕으로 다음 두 항목을 작성해주세요:\n"
-        "1. comment: 투자자 관점에서 오늘의 핵심 포인트를 2~3문장으로 작성\n"
-        f"2. x_reaction: 검색에서 찾은 {reaction_label}을 1~2문장으로 요약 "
-        "(유의미한 내용을 찾지 못한 경우 반드시 빈 문자열 \"\"로 작성)\n\n"
-        "인용 번호([1], [2] 등)는 절대 포함하지 마세요.\n"
-        "모든 응답은 한국어로 작성하세요.\n"
-        '반드시 JSON 형식으로만 응답하세요: {"comment": "...", "x_reaction": "..."}'
-    )
-    client = google_genai.Client(api_key=api_key)
-    # Search Grounding 활성화
-    try:
-        grounding_config = genai_types.GenerateContentConfig(
-            tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())]
-        )
-    except Exception:
-        grounding_config = None
-
-    models_to_try = ["gemini-2.0-flash", "gemini-2.5-flash"]
-    for model in models_to_try:
-        for attempt in range(3):
-            try:
-                kwargs = {"model": model, "contents": prompt}
-                if grounding_config:
-                    kwargs["config"] = grounding_config
-                response = client.models.generate_content(**kwargs)
-                text = _extract_gemini_text(response).strip()
-                # 인용 번호 제거
-                text = re.sub(r'\[\d+\]', '', text)
-                if not text:
-                    print(f"_gemini_chart_comment: empty response (model={model}, attempt={attempt+1})")
-                    if attempt < 2:
-                        time.sleep(5)
-                    continue
-                match = re.search(r'\{.*\}', text, re.DOTALL)
-                if match:
-                    data = json.loads(match.group())
-                    return {
-                        "comment": data.get("comment", ""),
-                        "x_reaction": data.get("x_reaction", ""),
-                    }
-                print(f"_gemini_chart_comment: no JSON found (model={model}, attempt={attempt+1}): {text[:100]}")
-            except Exception as e:
-                err_str = str(e)
-                print(f"_gemini_chart_comment error (model={model}, attempt={attempt+1}): {err_str[:200]}")
-                is_retryable = (
-                    "429" in err_str or "503" in err_str
-                    or "rate" in err_str.lower() or "unavailable" in err_str.lower()
-                )
-                if is_retryable and attempt < 2:
-                    time.sleep(10)
-                    continue
-                break
-    return {"comment": "", "x_reaction": ""}
-
-
-@app.get("/api/analysis")
-def get_analysis(
-    symbol: str = Query(...),
-    name: str = Query(""),
-    is_korean: bool = Query(True),
-):
-    cache_key = f"analysis:{symbol}"
-    cached, hit = _get_cache(cache_key)
-    if hit:
-        return cached
-
-    quote = get_quote(symbol) if symbol else None
-    change_pct = f"{quote.get('10. change percent', 0):+.2f}%" if quote else "0%"
-    news = _google_news_rss(name or symbol, is_korean)[:5]
-    news_titles = [n.get("title", "") for n in news]
-
-    analysis = _gemini_chart_comment(name or symbol, symbol, change_pct, news_titles, is_korean)
-    comment = analysis.get("comment", "")
-    x_reaction = analysis.get("x_reaction", "")
-    result = {"comment": comment, "x_reaction": x_reaction, "news_items": []}
-    if comment:
-        _set_cache(cache_key, result, ttl=1800)
-    return result
 
 
 def _parse_pub_date(date_str: str) -> datetime:
@@ -675,13 +626,14 @@ def _gemini_stock_analysis(stock_summaries: list, model: str = "gemini-2.5-flash
     except Exception:
         grounding_config = None
 
-    # 0~1번: 지정 모델, 2번 이후: gemini-2.0-flash 폴백
-    fallback_model = "gemini-2.0-flash"
-    max_attempts = 5
+    # 모델 순서: 기본 → gemini-2.0-flash → gemini-1.5-flash
+    fallback_models = ["gemini-2.0-flash", "gemini-1.5-flash"]
+    model_sequence = [model, model] + fallback_models  # 기본 모델 2회 시도 후 폴백
+    max_attempts = len(model_sequence)
     for attempt in range(max_attempts):
-        current_model = model if attempt < 2 else fallback_model
-        if attempt == 2 and model != fallback_model:
-            print(f"Gemini stock analysis: switching to {fallback_model} fallback")
+        current_model = model_sequence[attempt]
+        if attempt >= 2 and model_sequence[attempt] != model_sequence[attempt - 1]:
+            print(f"Gemini stock analysis: switching to {current_model} fallback")
         try:
             gen_kwargs = {"model": current_model, "contents": prompt}
             if grounding_config:
@@ -704,16 +656,24 @@ def _gemini_stock_analysis(stock_summaries: list, model: str = "gemini-2.5-flash
             return result[:len(stock_summaries)]
         except Exception as e:
             err_str = str(e)
+            is_quota_exhausted = "quota" in err_str.lower() and "429" in err_str
             is_retryable = (
                 "429" in err_str or "quota" in err_str.lower() or "rate" in err_str.lower()
                 or "503" in err_str or "unavailable" in err_str.lower() or "overloaded" in err_str.lower()
             )
             print(f"Gemini stock analysis error (attempt {attempt+1}, model={current_model}): {e}")
             if is_retryable and attempt < max_attempts - 1:
-                # 모델 전환 시 짧게 대기, 같은 모델 재시도 시 지수 백오프
-                wait = 10 if attempt == 1 else min(30 * (2 ** max(0, attempt - 2)), 60)
-                print(f"Gemini stock analysis: retrying in {wait}s (attempt {attempt+1}/{max_attempts})")
-                time.sleep(wait)
+                if is_quota_exhausted:
+                    # 쿼터 소진 시 다음 모델로 즉시 전환 (대기 없음)
+                    wait = 0
+                else:
+                    # retryDelay 파싱, 없으면 지수 백오프
+                    m = re.search(r"retryDelay['\"]:\s*['\"](\d+)s", err_str)
+                    suggested = int(m.group(1)) if m else None
+                    wait = suggested if suggested else min(30 * (2 ** max(0, attempt - 1)), 60)
+                if wait:
+                    print(f"Gemini stock analysis: retrying in {wait}s (attempt {attempt+1}/{max_attempts})")
+                    time.sleep(wait)
                 continue
             break
     return empty
