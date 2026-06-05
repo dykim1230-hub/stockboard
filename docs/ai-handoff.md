@@ -43,6 +43,9 @@
 | UI 개선 5종 | 완료 (2026-06-03) — 페이지 타이틀, 즐겨찾기 온보딩 패널, AI의견 위치 이동, 지표 툴팁, 카드 고정높이+모바일 2열 |
 | 버그 수정 (체크박스/마퀴) | 완료 (2026-06-03) — 체크박스 flex-shrink 추가, 마퀴 inline-block 전환으로 클리핑 수정 |
 | Gemini Google Search Grounding | 완료 (2026-06-03) — 투자자 반응 섹션. 국내: Naver 3-query, 해외: X/Twitter. x_reaction 필드 |
+| 웹 AI 투자의견·뉴스요약 제거 | 완료 (2026-06-05) — Gemini 쿼터 절약 목적. `/api/analysis`, `_gemini_chart_comment` 삭제 |
+| 문의 폼 (푸터) | 완료 (2026-06-05) — `POST /api/contact`, IP당 10분 3회 rate limit, ContactModal + Footer |
+| Gemini 폴백 3단계 | 완료 (2026-06-05) — 2.5-flash → 2.0-flash → 1.5-flash. 쿼터소진 즉시전환, retryDelay 파싱 |
 
 ## 다음 작업 후보
 
@@ -91,10 +94,10 @@ bash scripts/post-deploy.sh
 
 | 항목 | 내용 |
 | --- | --- |
-| 날짜 | 2026-06-03 |
+| 날짜 | 2026-06-05 |
 | 작성자 | Claude Sonnet 4.6 |
-| 작업 환경 | Windows 11. 백엔드는 push → Render 자동배포. 프론트는 firebase deploy --only hosting. |
-| 내용 | ①UI 개선 5종(타이틀/온보딩/AI의견위치/툴팁/카드그리드) ②체크박스·마퀴 버그 수정 ③Gemini Google Search Grounding(국내 Naver, 해외 X/Twitter, x_reaction 필드) |
+| 작업 환경 | macOS. 백엔드는 push → Render 자동배포. 프론트는 firebase deploy --only hosting. |
+| 내용 | ①웹 AI 투자의견·뉴스요약 제거(쿼터 절약) ②푸터 문의 폼(`/api/contact`) ③Gemini 폴백 3단계+retryDelay 파싱 |
 | 다음 우선순위 | 포트폴리오 수익률 트래킹, 경제지표 캘린더, PWA 전환 |
-| Gemini 모델 현황 | 뉴스레터: 2.5-flash(20회/일), 차트투자의견: 2.0-flash(1500회/일), 폴백: 2.0-flash, Grounding: google_search tool |
-| 주의 | gemini-1.5-flash는 이 계정 v1beta에서 404. 사용 금지. 국내 종목 X 검색은 색인 없음 → Naver 3-query 사용. |
+| Gemini 모델 현황 | 뉴스레터: 2.5-flash → 2.0-flash → 1.5-flash 폴백. 쿼터소진 시 즉시 전환. Grounding: google_search tool |
+| 주의 | gemini-1.5-flash 2026-06-01 당시 v1beta 404였으나 재추가함 — Render 로그에서 실제 동작 여부 확인 필요. 국내 종목 X 검색은 색인 없음 → Naver 3-query 사용. 문의 메일 수신 주소는 CONTACT_ADMIN_EMAIL 환경변수로 설정. |

@@ -24,7 +24,8 @@
 | 관련 뉴스 | 완료 | Google News RSS 기반 |
 | 프로필 관리 | 완료 | 비밀번호 변경, 회원 탈퇴 |
 | 관리자 패널 | 완료 | 회원 목록 조회, 계정 삭제, 비밀번호 초기화 링크 생성 |
-| 회원별 메일 요약 | 검토/설계 중 | Resend + Render Cron Job 기반으로 구현 예정 |
+| 회원별 메일 요약 | 완료 | Resend + Render Cron Job, Gemini AI 투자의견·뉴스 요약 포함 |
+| 문의 폼 | 완료 | 푸터 ContactModal, POST /api/contact, IP rate limit |
 
 ## 3. 기술 스택
 
@@ -84,6 +85,8 @@ web: uvicorn main:app --host 0.0.0.0 --port $PORT
 | `RESEND_API_KEY` | 메일 발송 API 키 |
 | `MAIL_FROM` | 메일 발신자 주소 |
 | `CRON_SECRET` | Render Cron Job 호출 인증 |
+| `GEMINI_API_KEY` | Google Gemini AI 요약 API 키 |
+| `CONTACT_ADMIN_EMAIL` | 문의 폼 수신 이메일 (없으면 MAIL_FROM 사용) |
 
 ## 6. 데이터 모델
 
@@ -204,9 +207,15 @@ Value: v=DMARC1; p=none;
 
 ## 9. 최근 작업 히스토리
 
-| 커밋 | 내용 |
-| --- | --- |
-| `d39e6ae` | Yahoo Finance RSS를 Google News RSS로 교체 |
+| 날짜 | 커밋 | 내용 |
+| --- | --- | --- |
+| 2026-06-05 | `e394a30` | 웹 AI 의견 제거, 문의 폼 추가, Gemini 폴백 3단계 |
+| 2026-06-03 | `47df745` | UI 개선 5종, 버그 수정, Gemini Search Grounding |
+| 2026-06-01 | 다수 | 수신해지, 관리자강제발송, 차트AI투자의견, 도메인연결 |
+| 2026-05-30 | `672c4ef` | Gemini JSON 파싱 오류 수정, 배포 자동 점검 체계 |
+| 2026-05-26 | `b589375` | AI 뉴스요약 추가, 뉴스레터 구조 개편, rate limit 버그 수정 |
+| 2026-05-19 | `eb19e29` | 성능 개선, 뉴스 정렬, 관리자 버그 수정 |
+| 구버전 | `d39e6ae` | Yahoo Finance RSS를 Google News RSS로 교체 |
 | `6835f71` | 사용자 프로필, 회원 탈퇴, 관리자 패널 추가 |
 | `662cf93` | BASE_URL을 Render 배포 주소로 변경 |
 | `2154b16` | Firebase Auth/Firestore 로그인, Render 배포 설정 추가 |

@@ -78,6 +78,8 @@ const BASE_URL = 'https://stockboard-fhh4.onrender.com/api';
 | `RESEND_API_KEY` | Resend 메일 발송 API 키 |
 | `MAIL_FROM` | 메일 발신자 주소 |
 | `CRON_SECRET` | Render Cron Job 호출 인증 |
+| `GEMINI_API_KEY` | Google Gemini AI 요약 API 키 |
+| `CONTACT_ADMIN_EMAIL` | 문의 폼 수신 이메일 (없으면 MAIL_FROM 사용) |
 
 ## 데이터 모델
 

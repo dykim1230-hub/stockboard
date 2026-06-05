@@ -11,6 +11,44 @@
 
 ## 로그
 
+### 2026-06-05 - 웹 AI 의견 제거, 문의 폼 추가, Gemini 폴백 개선
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Sonnet 4.6 |
+| 변경 파일 | `main.py`, `index.html`, `test_digest_cron.py`, `docs/ai-context.md`, `docs/ai-handoff.md`, `docs/ai-worklog.md`, `docs/notion-project-log.md` |
+| 커밋 | `e394a30` |
+
+**1. 웹사이트 AI 투자의견·뉴스요약 제거**
+- 원인: 웹 화면에서 종목 조회 시마다 `_gemini_chart_comment` 호출 → 뉴스레터용 Gemini 일일 쿼터 소모
+- 수정: `_gemini_chart_comment` 함수 및 `GET /api/analysis` 엔드포인트 삭제
+- 프론트: `analysis` state, fetch useEffect, "AI 투자 의견" 섹션 전체 제거
+- 효과: Gemini 쿼터 전량 뉴스레터 전용으로 집중
+
+**2. 문의 폼 추가 (푸터 영역)**
+- `POST /api/contact` 엔드포인트 추가 (FastAPI, pydantic BaseModel)
+- IP당 10분에 최대 3회 rate limit (in-memory dict)
+- 수신 이메일: `CONTACT_ADMIN_EMAIL` env var, 없으면 `MAIL_FROM` 사용
+- 프론트: `ContactModal` (이름/이메일/제목/내용, 글자수 표시, 성공 화면) + `Footer` 컴포넌트
+- 임포트 추가: `Request` (fastapi), `BaseModel` (pydantic)
+
+**3. Gemini 폴백 모델 개선**
+- 기존: gemini-2.5-flash → gemini-2.0-flash (2단계)
+- 변경: gemini-2.5-flash × 2 → gemini-2.0-flash → gemini-1.5-flash (3단계)
+- 쿼터 소진(429+quota) 감지 시 대기 없이 즉시 다음 모델로 전환
+- 503 응답의 `retryDelay` 값을 파싱해 API 권장 대기시간 준수
+- 적용: `_gemini_stock_analysis` (뉴스레터 전용)
+
+**4. 기타**
+- `test_digest_cron.py`: `force=False` 누락 테스트 2개 수정
+- Render 리모트와 rebase 충돌 해소: Search Grounding 설정 보존 + 새 폴백 로직 적용
+
+**결정사항**
+- 웹 AI 의견은 쿼터 소진 시 어차피 공란 → 제거해도 UX 손실 없음. 뉴스레터 품질이 더 중요
+- gemini-1.5-flash: 이전 로그(2026-06-01)에서 이 계정 v1beta 404로 기록했으나, 재추가해 운영 환경에서 실제 작동 여부 확인 예정
+
+---
+
 ### 2026-06-03 - UI 개선 5종, 버그 수정 2건, Gemini Google Search Grounding
 
 | 항목 | 내용 |
