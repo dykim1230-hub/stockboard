@@ -11,6 +11,40 @@
 
 ## 로그
 
+### 2026-06-08 - Gemini 모델 2.5-flash-lite 고정, 뉴스 요약 재시도 로직 추가
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Sonnet 4.6 |
+| 변경 파일 | `main.py` |
+| 커밋 | `8aebff1` |
+
+**배경**
+- 뉴스 요약·투자 의견이 뉴스레터에서 계속 누락되는 문제
+- Gemini 1.5/2.0-flash 모델이 2026년 상반기 중 서비스 종료되어 폴백 시 404 발생
+- `_gemini_summarize`에 재시도 로직이 없어 1회 실패 즉시 빈 값 반환
+
+**변경 내용**
+
+1. 모델 고정: `gemini-2.5-flash-lite`
+   - 뉴스레터용 API 호출은 하루 1~2회로 RPD 여유 충분
+   - `_gemini_summarize`: `gemini-1.5-flash` → `gemini-2.5-flash-lite`
+   - `_gemini_stock_analysis` 기본값: `gemini-2.5-flash` → `gemini-2.5-flash-lite`
+
+2. `_gemini_summarize` 재시도 로직 추가 (기존 0회 → 최대 3회)
+   - 빈 응답, JSON 파싱 실패, rate limit(429/503) 모두 재시도
+   - `retryDelay` 파싱 또는 지수 백오프(최대 60s) 적용
+
+3. `_gemini_stock_analysis` 폴백 모델 정리
+   - 기존: `[gemini-2.0-flash, gemini-1.5-flash]` (종료된 모델)
+   - 변경: `[gemini-2.5-flash]` (lite 2회 실패 시 full로 전환)
+
+**결정사항**
+- gemini-1.5/2.0-flash 모두 2026년 서비스 종료 확인 — 폴백에서 완전 제거
+- Gemini 2.5 Flash-Lite 무료 티어: RPD 1,000~5,000, 뉴스레터용으로 충분
+
+---
+
 ### 2026-06-05 - 웹 AI 의견 제거, 문의 폼 추가, Gemini 폴백 개선
 
 | 항목 | 내용 |
