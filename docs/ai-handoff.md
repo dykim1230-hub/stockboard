@@ -47,6 +47,7 @@
 | 문의 폼 (푸터) | 완료 (2026-06-05) — `POST /api/contact`, IP당 10분 3회 rate limit, ContactModal + Footer |
 | Gemini 폴백 3단계 | 완료 (2026-06-05) — 2.5-flash → 2.0-flash → 1.5-flash. 쿼터소진 즉시전환, retryDelay 파싱 |
 | Gemini 2.5-flash-lite 고정 + 뉴스요약 재시도 | 완료 (2026-06-08) — 종료된 1.5/2.0-flash 폴백 제거, 2.5-flash-lite 고정, _gemini_summarize 3회 재시도 추가 |
+| 로그인 후 공백 화면 버그 수정 | 완료 (2026-06-08) — ChartSection stale analysis JSX 제거(ReferenceError 근본 원인), EcCalBoundary Error Boundary 추가, EconomicCalendar 재활성화 |
 
 ## 다음 작업 후보
 
@@ -98,7 +99,7 @@ bash scripts/post-deploy.sh
 | 날짜 | 2026-06-08 |
 | 작성자 | Claude Sonnet 4.6 |
 | 작업 환경 | macOS. 백엔드는 push → Render 자동배포. 프론트는 firebase deploy --only hosting. |
-| 내용 | ①Gemini 2.5-flash-lite 고정(1.5/2.0-flash 서비스종료) ②_gemini_summarize 3회 재시도 추가 ③폴백 모델을 gemini-2.5-flash 단일로 정리 |
-| 다음 우선순위 | 포트폴리오 수익률 트래킹, 경제지표 캘린더, PWA 전환 |
+| 내용 | ①Gemini 2.5-flash-lite 고정 ②뉴스요약 3회 재시도 ③ChartSection stale analysis JSX 제거(ReferenceError 버그) ④EcCalBoundary 추가 + EconomicCalendar 재활성화 |
+| 다음 우선순위 | cron-job.org 경제캘린더 잡 등록, 포트폴리오 수익률 트래킹, PWA 전환 |
 | Gemini 모델 현황 | 뉴스레터: 2.5-flash-lite(기본) → 2.5-flash(폴백). Grounding: google_search tool |
-| 주의 | gemini-1.5-flash, gemini-2.0-flash 서비스 종료 확인(2026년 상반기) — 폴백 목록에서 완전 제거. 국내 종목 X 검색은 색인 없음 → Naver 3-query 사용. 문의 메일 수신 주소는 CONTACT_ADMIN_EMAIL 환경변수로 설정. |
+| 주의 | gemini-1.5-flash, gemini-2.0-flash 서비스 종료 확인(2026년 상반기) — 폴백 목록에서 완전 제거. EconomicCalendar는 Firestore 데이터 없으면 숨겨진 상태(return null) 정상. cron-job.org 잡 등록 후 데이터 확인 필요. |

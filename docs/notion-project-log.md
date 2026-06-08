@@ -209,6 +209,7 @@ Value: v=DMARC1; p=none;
 
 | 날짜 | 커밋 | 내용 |
 | --- | --- | --- |
+| 2026-06-08 | `e180f66` | 로그인 후 공백 화면 버그 수정 — ChartSection stale analysis JSX(ReferenceError) 제거, EcCalBoundary 추가, EconomicCalendar 재활성화 |
 | 2026-06-08 | `8aebff1` | Gemini 2.5-flash-lite 고정, 뉴스요약 재시도 3회 추가, 종료된 폴백 모델 정리 |
 | 2026-06-05 | `e394a30` | 웹 AI 의견 제거, 문의 폼 추가, Gemini 폴백 3단계 |
 | 2026-06-03 | `47df745` | UI 개선 5종, 버그 수정, Gemini Search Grounding |

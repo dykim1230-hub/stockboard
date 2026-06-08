@@ -11,6 +11,36 @@
 
 ## 로그
 
+### 2026-06-08 (2) - 로그인 후 공백 화면 버그 수정, EconomicCalendar ErrorBoundary 추가
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Sonnet 4.6 |
+| 변경 파일 | `index.html` |
+| 커밋 | `6a78e00`, `e180f66` |
+
+**배경**
+- EconomicCalendar 컴포넌트 추가 후 로그인 시 화면 전체가 공백이 되는 문제 발생
+- 로그인 전 랜딩 페이지는 정상 표시, 로그인 후에만 증상 발생
+
+**근본 원인 (commit `e180f66`)**
+- 2026-06-05에 웹 AI 투자의견 기능(`/api/analysis`) 제거 시 ChartSection의 `analysis`·`analysisLoading` state는 삭제했으나, 해당 값을 렌더링하는 JSX 블록 22줄이 그대로 남아 있었음
+- 로그인 전: `activeStock = null` → ChartSection이 early return하여 해당 JSX에 도달하지 않음 → 무증상
+- 로그인 후: favorites 로드 → `activeStock` 설정 → ChartSection이 full render → 미정의 `analysisLoading` 참조 → ReferenceError → React 트리 전체 unmount → 공백 화면
+- **수정:** ChartSection에서 stale analysis JSX 블록 완전 제거
+
+**추가 작업 (commit `6a78e00`)**
+- `EcCalBoundary` Error Boundary 클래스 컴포넌트 추가
+- `EconomicCalendar`를 `EcCalBoundary`로 감싸 재활성화
+- 렌더 에러 발생 시 앱 전체가 죽지 않고 해당 섹션만 null 반환
+- `componentDidCatch`에서 에러를 콘솔에 출력하여 향후 디버깅 가능
+
+**결정사항**
+- EconomicCalendar는 현재 Firestore에 데이터 없음 → 섹션이 숨겨진 상태(return null)가 정상
+- cron-job.org에 주간 캘린더 업데이트 잡 등록 후 실제 데이터 확인 예정
+
+---
+
 ### 2026-06-08 - Gemini 모델 2.5-flash-lite 고정, 뉴스 요약 재시도 로직 추가
 
 | 항목 | 내용 |
