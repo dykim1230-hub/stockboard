@@ -546,37 +546,56 @@ def _gemini_summarize(news_items: list) -> list:
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key or not news_items:
         return []
-    try:
-        client = google_genai.Client(api_key=api_key)
-        articles_text = "\n\n".join(
-            f"{i+1}. 제목: {n['title']}"
-            + (f"\n   내용: {n['desc']}" if n.get('desc') else "")
-            + (f"\n   출처: {n['source']}" if n.get('source') else "")
-            for i, n in enumerate(news_items)
-        )
-        prompt = (
-            "아래 한국 경제 뉴스 기사들을 각각 3~4문장으로 요약해주세요.\n"
-            "내용이 없는 기사는 제목과 배경 지식을 바탕으로 핵심을 유추해서 써주세요.\n"
-            "독자가 오늘의 주요 경제 동향을 빠르게 파악할 수 있도록 구체적으로 써주세요.\n"
-            "형식: 반드시 JSON 배열로만 응답하세요. 다른 텍스트 없이.\n"
-            '예시: ["요약1", "요약2", "요약3", "요약4", "요약5"]\n\n'
-            f"기사 목록:\n{articles_text}"
-        )
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-        )
-        text = _extract_gemini_text(response).strip()
-        summaries = _parse_first_json_array(text)
-        if summaries is not None:
-            return summaries[:len(news_items)]
-        print(f"Gemini summarize: no JSON array found. text[:200]={text[:200]}")
-    except Exception as e:
-        print(f"Gemini summarize error: {e}")
+    client = google_genai.Client(api_key=api_key)
+    articles_text = "\n\n".join(
+        f"{i+1}. 제목: {n['title']}"
+        + (f"\n   내용: {n['desc']}" if n.get('desc') else "")
+        + (f"\n   출처: {n['source']}" if n.get('source') else "")
+        for i, n in enumerate(news_items)
+    )
+    prompt = (
+        "아래 한국 경제 뉴스 기사들을 각각 3~4문장으로 요약해주세요.\n"
+        "내용이 없는 기사는 제목과 배경 지식을 바탕으로 핵심을 유추해서 써주세요.\n"
+        "독자가 오늘의 주요 경제 동향을 빠르게 파악할 수 있도록 구체적으로 써주세요.\n"
+        "형식: 반드시 JSON 배열로만 응답하세요. 다른 텍스트 없이.\n"
+        '예시: ["요약1", "요약2", "요약3", "요약4", "요약5"]\n\n'
+        f"기사 목록:\n{articles_text}"
+    )
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash-lite",
+                contents=prompt,
+            )
+            text = _extract_gemini_text(response).strip()
+            if not text:
+                print(f"Gemini summarize: empty response (attempt {attempt+1})")
+                if attempt < max_attempts - 1:
+                    time.sleep(5)
+                    continue
+                break
+            summaries = _parse_first_json_array(text)
+            if summaries is not None:
+                return summaries[:len(news_items)]
+            print(f"Gemini summarize: no JSON array found (attempt {attempt+1}): {text[:200]}")
+            if attempt < max_attempts - 1:
+                time.sleep(5)
+                continue
+        except Exception as e:
+            err_str = str(e)
+            is_retryable = any(k in err_str for k in ["429", "503", "quota", "rate", "unavailable", "overloaded"])
+            print(f"Gemini summarize error (attempt {attempt+1}): {e}")
+            if is_retryable and attempt < max_attempts - 1:
+                m = re.search(r"retryDelay['\"]:\s*['\"](\d+)s", err_str)
+                wait = int(m.group(1)) if m else min(30 * (2 ** attempt), 60)
+                time.sleep(wait)
+                continue
+            break
     return []
 
 
-def _gemini_stock_analysis(stock_summaries: list, model: str = "gemini-2.5-flash") -> list:
+def _gemini_stock_analysis(stock_summaries: list, model: str = "gemini-2.5-flash-lite") -> list:
     """종목별 투자 의견(1줄) + 기사별 개별 요약(2문장) 한 번에 생성.
     반환: [{"comment": "...", "news_items": ["요약1", "요약2", ...]}, ...]
     """
@@ -626,9 +645,9 @@ def _gemini_stock_analysis(stock_summaries: list, model: str = "gemini-2.5-flash
     except Exception:
         grounding_config = None
 
-    # 모델 순서: 기본 → gemini-2.0-flash → gemini-1.5-flash
-    fallback_models = ["gemini-2.0-flash", "gemini-1.5-flash"]
-    model_sequence = [model, model] + fallback_models  # 기본 모델 2회 시도 후 폴백
+    # 모델 순서: 기본(2회) → gemini-2.5-flash 폴백
+    fallback_models = ["gemini-2.5-flash"]
+    model_sequence = [model, model] + fallback_models
     max_attempts = len(model_sequence)
     for attempt in range(max_attempts):
         current_model = model_sequence[attempt]
