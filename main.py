@@ -13,7 +13,7 @@ import os
 import json
 import urllib.parse
 import html
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.utils import parsedate_to_datetime
@@ -831,6 +831,7 @@ def _build_digest_html(user_email: str, summaries: list, sent_at: datetime, uid:
         """)
 
     body = "".join(rows) or '<p style="color:#6b7280;">즐겨찾기 종목이 없습니다.</p>'
+    economic_calendar_html = _get_today_economic_events_html()
     sent_label = sent_at.strftime("%Y-%m-%d %H:%M")
     return f"""<!doctype html>
 <html>
@@ -843,7 +844,7 @@ def _build_digest_html(user_email: str, summaries: list, sent_at: datetime, uid:
            style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:11px 26px;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:20px;">
           대시보드 바로가기 →
         </a>
-        {body}
+        {economic_calendar_html}{body}
         <div style="margin-top:24px;text-align:center;">
           <a href="https://portfolio-4ffcf.web.app"
              style="display:inline-block;background:#1e293b;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:600;">
@@ -1127,6 +1128,280 @@ def admin_force_digest(background_tasks: BackgroundTasks, authorization: str = H
     _verify_admin(authorization)
     background_tasks.add_task(_run_digest_job, force=True)
     return {"status": "started"}
+
+
+# ── Economic Calendar ──────────────────────────────────────
+
+INDICATOR_META = {
+    "CPI":        {"name_ko": "소비자물가지수(미국)", "impact": "high"},
+    "PPI":        {"name_ko": "생산자물가지수(미국)", "impact": "high"},
+    "Employment": {"name_ko": "고용보고서(미국)",     "impact": "high"},
+    "FOMC":       {"name_ko": "FOMC 금리 결정",       "impact": "high"},
+    "BOK_RATE":   {"name_ko": "한국 기준금리 결정",   "impact": "high"},
+    "KR_CPI":     {"name_ko": "소비자물가지수(한국)", "impact": "medium"},
+}
+
+
+def fetch_bls_calendar() -> list:
+    """BLS 공식 iCalendar에서 CPI/PPI/Employment 수집."""
+    try:
+        from icalendar import Calendar as iCal
+        resp = requests.get("https://www.bls.gov/schedule/news_release/bls.ics", timeout=15)
+        resp.raise_for_status()
+        cal = iCal.from_ical(resp.content)
+        today = datetime.now(ZoneInfo("UTC")).date()
+        cutoff = today + timedelta(weeks=8)
+        keyword_map = [
+            ("Consumer Price Index", "CPI"),
+            ("Producer Price Index", "PPI"),
+            ("Employment Situation", "Employment"),
+        ]
+        results = []
+        for component in cal.walk():
+            if component.name != "VEVENT":
+                continue
+            summary = str(component.get("SUMMARY", ""))
+            indicator = None
+            for keyword, code in keyword_map:
+                if keyword in summary:
+                    indicator = code
+                    break
+            if not indicator:
+                continue
+            dtstart = component.get("DTSTART")
+            if dtstart is None:
+                continue
+            dt = dtstart.dt
+            if hasattr(dt, "date"):
+                dt_kst = dt.astimezone(ZoneInfo("Asia/Seoul"))
+                event_date = dt_kst.date()
+                time_kst = dt_kst.strftime("%H:%M")
+            else:
+                event_date = dt
+                time_kst = "TBD"
+            if not (today <= event_date <= cutoff):
+                continue
+            meta = INDICATOR_META[indicator]
+            date_str = event_date.strftime("%Y-%m-%d")
+            results.append({
+                "id": f"{date_str}-US-{indicator}",
+                "date": date_str,
+                "time_kst": time_kst,
+                "country": "US",
+                "indicator": indicator,
+                "name_ko": meta["name_ko"],
+                "impact": meta["impact"],
+                "updated_at": datetime.now(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S"),
+            })
+        return results
+    except Exception as e:
+        print(f"fetch_bls_calendar error: {e}")
+        return []
+
+
+def fetch_bok_calendar() -> list:
+    """한국은행 RSS에서 기준금리/소비자물가 발표 일정 수집."""
+    try:
+        import feedparser
+        from calendar import timegm
+        feed = feedparser.parse(
+            "https://www.bok.or.kr/portal/bbs/B0000338/list.do"
+            "?menuNo=200069&pageIndex=1&searchCnd=1&searchStr=&rssYn=Y"
+        )
+        today = datetime.now(ZoneInfo("Asia/Seoul")).date()
+        cutoff = today + timedelta(weeks=8)
+        keyword_map = [
+            ("기준금리", "BOK_RATE"),
+            ("소비자물가", "KR_CPI"),
+        ]
+        results = []
+        seen_ids = set()
+        for entry in feed.entries:
+            title = entry.get("title", "")
+            indicator = None
+            for keyword, code in keyword_map:
+                if keyword in title:
+                    indicator = code
+                    break
+            if not indicator:
+                continue
+            pub = entry.get("published_parsed") or entry.get("updated_parsed")
+            if pub is None:
+                continue
+            event_date = (
+                datetime.utcfromtimestamp(timegm(pub))
+                .replace(tzinfo=ZoneInfo("UTC"))
+                .astimezone(ZoneInfo("Asia/Seoul"))
+                .date()
+            )
+            if not (today <= event_date <= cutoff):
+                continue
+            date_str = event_date.strftime("%Y-%m-%d")
+            doc_id = f"{date_str}-KR-{indicator}"
+            if doc_id in seen_ids:
+                continue
+            seen_ids.add(doc_id)
+            meta = INDICATOR_META[indicator]
+            results.append({
+                "id": doc_id,
+                "date": date_str,
+                "time_kst": "TBD",
+                "country": "KR",
+                "indicator": indicator,
+                "name_ko": meta["name_ko"],
+                "impact": meta["impact"],
+                "updated_at": datetime.now(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S"),
+            })
+        return results
+    except Exception as e:
+        print(f"fetch_bok_calendar error: {e}")
+        return []
+
+
+def fetch_fomc_calendar() -> list:
+    """연준 공식 페이지에서 FOMC 회의 날짜 수집."""
+    try:
+        resp = requests.get(
+            "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+            timeout=15,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "lxml")
+        today = datetime.now(ZoneInfo("UTC")).date()
+        cutoff = today + timedelta(weeks=8)
+        current_year = today.year
+        results = []
+        seen_dates = set()
+        for panel in soup.select(".panel.panel-default"):
+            heading = panel.select_one(".panel-heading")
+            year_text = heading.get_text(strip=True) if heading else ""
+            m = re.search(r"\d{4}", year_text)
+            year = int(m.group()) if m else current_year
+            for meeting_div in panel.select(".fomc-meeting"):
+                date_div = meeting_div.select_one(".fomc-meeting__date")
+                if not date_div:
+                    continue
+                date_text = date_div.get_text(strip=True)
+                month_match = re.search(r"([A-Za-z]+)\s+(\d+)(?:-(\d+))?", date_text)
+                if not month_match:
+                    continue
+                month_str = month_match.group(1)
+                end_day = month_match.group(3) or month_match.group(2)
+                try:
+                    event_date = datetime.strptime(f"{month_str} {end_day} {year}", "%B %d %Y").date()
+                except ValueError:
+                    continue
+                if not (today <= event_date <= cutoff):
+                    continue
+                if event_date in seen_dates:
+                    continue
+                seen_dates.add(event_date)
+                date_str = event_date.strftime("%Y-%m-%d")
+                results.append({
+                    "id": f"{date_str}-US-FOMC",
+                    "date": date_str,
+                    "time_kst": "TBD",
+                    "country": "US",
+                    "indicator": "FOMC",
+                    "name_ko": INDICATOR_META["FOMC"]["name_ko"],
+                    "impact": INDICATOR_META["FOMC"]["impact"],
+                    "updated_at": datetime.now(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S"),
+                })
+        return results
+    except Exception as e:
+        print(f"fetch_fomc_calendar error: {e}")
+        return []
+
+
+def _get_today_economic_events_html() -> str:
+    """오늘 경제지표 발표 일정 HTML 블록 생성. 없으면 빈 문자열 반환."""
+    try:
+        if not _init_firebase_admin():
+            return ""
+        db = firestore.client()
+        today = datetime.now(ZoneInfo("Asia/Seoul")).strftime("%Y-%m-%d")
+        docs = db.collection("economic_calendar").where("date", "==", today).stream()
+        events = [doc.to_dict() for doc in docs]
+        if not events:
+            return ""
+        lines = "".join(
+            f"• {html.escape(e.get('name_ko', ''))} ({html.escape(e.get('time_kst', 'TBD'))} KST)<br>"
+            for e in sorted(events, key=lambda x: x.get("time_kst", "ZZ"))
+        )
+        return (
+            '<div style="background:#FFF8E1;border:1px solid #FFE082;border-radius:8px;'
+            'padding:12px 16px;margin-bottom:16px;">'
+            '<strong>📅 오늘의 주요 경제 발표</strong><br>'
+            f'{lines}'
+            '</div>'
+        )
+    except Exception as e:
+        print(f"_get_today_economic_events_html error: {e}")
+        return ""
+
+
+@app.post("/api/cron/update-calendar")
+def update_economic_calendar(x_cron_secret: str = Header(None)):
+    cron_secret = os.environ.get("CRON_SECRET")
+    if not cron_secret:
+        raise HTTPException(status_code=503, detail="CRON_SECRET is not configured")
+    if x_cron_secret != cron_secret:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    db = _get_firestore_client()
+    errors = []
+    all_events = []
+    for fn in [fetch_bls_calendar, fetch_bok_calendar, fetch_fomc_calendar]:
+        try:
+            all_events.extend(fn())
+        except Exception as e:
+            errors.append(f"{fn.__name__}: {e}")
+    batch = db.batch()
+    count = 0
+    for event in all_events:
+        ref = db.collection("economic_calendar").document(event["id"])
+        batch.set(ref, event, merge=True)
+        count += 1
+        if count % 450 == 0:
+            batch.commit()
+            batch = db.batch()
+            count = 0
+    if count > 0:
+        batch.commit()
+    return {"status": "ok", "updated": len(all_events), "errors": errors}
+
+
+@app.get("/api/economic-calendar")
+def get_economic_calendar(weeks: int = Query(2, ge=1, le=8)):
+    db = _get_firestore_client()
+    today = datetime.now(ZoneInfo("Asia/Seoul")).date()
+    end = today + timedelta(weeks=weeks)
+    today_str = today.strftime("%Y-%m-%d")
+    end_str = end.strftime("%Y-%m-%d")
+    try:
+        docs = (
+            db.collection("economic_calendar")
+            .where("date", ">=", today_str)
+            .where("date", "<=", end_str)
+            .order_by("date")
+            .stream()
+        )
+        results = []
+        for doc in docs:
+            d = doc.to_dict()
+            results.append({
+                "id": d.get("id"),
+                "date": d.get("date"),
+                "time_kst": d.get("time_kst"),
+                "country": d.get("country"),
+                "indicator": d.get("indicator"),
+                "name_ko": d.get("name_ko"),
+                "impact": d.get("impact"),
+            })
+        return results
+    except Exception as e:
+        print(f"get_economic_calendar error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

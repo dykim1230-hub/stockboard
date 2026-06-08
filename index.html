@@ -1392,6 +1392,68 @@ const ContactModal = ({ isOpen, onClose }) => {
     );
 };
 
+const EconomicCalendar = () => {
+    const [events, setEvents] = React.useState([]);
+    const [loading, setLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        fetch(`${BASE_URL}/economic-calendar?weeks=2`)
+            .then(r => r.ok ? r.json() : [])
+            .then(data => { setEvents(data); setLoading(false); })
+            .catch(() => setLoading(false));
+    }, []);
+
+    if (loading || events.length === 0) return null;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const grouped = events.reduce((acc, e) => {
+        (acc[e.date] = acc[e.date] || []).push(e);
+        return acc;
+    }, {});
+
+    const impactDots = (impact) => {
+        if (impact === 'high') return (
+            <span style={{display:'inline-flex', gap:'2px', marginLeft:'6px'}}>
+                {[0,1,2].map(i => <span key={i} style={{width:'6px', height:'6px', borderRadius:'50%', background:'#ef4444', display:'inline-block'}} />)}
+            </span>
+        );
+        if (impact === 'medium') return (
+            <span style={{display:'inline-flex', gap:'2px', marginLeft:'6px'}}>
+                {[0,1].map(i => <span key={i} style={{width:'6px', height:'6px', borderRadius:'50%', background:'#f97316', display:'inline-block'}} />)}
+            </span>
+        );
+        return null;
+    };
+
+    return (
+        <div className="glass-panel" style={{marginBottom:'1.5rem', padding:'1.2rem 1.4rem'}}>
+            <h2 style={{margin:'0 0 1rem', fontSize:'1rem', fontWeight:700, color:'var(--text-primary)', display:'flex', alignItems:'center', gap:'0.5rem'}}>
+                📅 이번 주 경제 일정
+            </h2>
+            {Object.entries(grouped).sort(([a],[b]) => a.localeCompare(b)).map(([date, items]) => (
+                <div key={date} style={{marginBottom:'0.75rem'}}>
+                    <div style={{display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'0.35rem'}}>
+                        <span style={{fontSize:'0.8rem', fontWeight:700, color:'var(--text-secondary)'}}>
+                            {date}
+                        </span>
+                        {date === today && (
+                            <span style={{fontSize:'0.7rem', background:'#2563eb', color:'#fff', borderRadius:'4px', padding:'1px 6px', fontWeight:700}}>오늘</span>
+                        )}
+                    </div>
+                    {items.map(e => (
+                        <div key={e.id} style={{display:'flex', alignItems:'center', gap:'0.6rem', padding:'5px 0', borderBottom:'1px solid rgba(255,255,255,0.05)', fontSize:'0.85rem'}}>
+                            <span style={{fontSize:'1rem'}}>{e.country === 'US' ? '🇺🇸' : '🇰🇷'}</span>
+                            <span style={{color:'var(--text-primary)', flex:1}}>{e.name_ko}</span>
+                            <span style={{color:'var(--text-muted)', fontSize:'0.78rem', minWidth:'40px', textAlign:'right'}}>{e.time_kst}</span>
+                            {impactDots(e.impact)}
+                        </div>
+                    ))}
+                </div>
+            ))}
+        </div>
+    );
+};
+
 const Footer = ({ onContactClick }) => (
     <footer style={{
         marginTop: '3rem', padding: '1.5rem 0', borderTop: '1px solid rgba(255,255,255,0.06)',
@@ -1639,6 +1701,7 @@ const App = () => {
                     즐겨찾기는 최대 7개까지만 추가할 수 있습니다.
                 </div>
             )}
+            <EconomicCalendar />
             <div className="main-grid">
                 <ChartSection activeStock={activeStock} />
                 <NewsSection activeStock={activeStock} />
