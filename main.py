@@ -1146,7 +1146,11 @@ def fetch_bls_calendar() -> list:
     """BLS 공식 iCalendar에서 CPI/PPI/Employment 수집."""
     try:
         from icalendar import Calendar as iCal
-        resp = requests.get("https://www.bls.gov/schedule/news_release/bls.ics", timeout=15)
+        resp = requests.get(
+            "https://www.bls.gov/schedule/news_release/bls.ics",
+            timeout=15,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"},
+        )
         resp.raise_for_status()
         cal = iCal.from_ical(resp.content)
         today = datetime.now(ZoneInfo("UTC")).date()
