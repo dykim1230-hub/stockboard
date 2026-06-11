@@ -1345,7 +1345,8 @@ def update_economic_calendar(x_cron_secret: str = Header(None)):
     db = _get_firestore_client()
     errors = []
     all_events = []
-    for fn in [fetch_bls_calendar, fetch_bok_calendar, fetch_fomc_calendar]:
+    # fetch_bls_calendar는 www.bls.gov의 Akamai 차단(403)으로 보류 (docs/ai-worklog.md 2026-06-11 참고)
+    for fn in [fetch_bok_calendar, fetch_fomc_calendar]:
         try:
             all_events.extend(fn())
         except Exception as e:

@@ -35,11 +35,30 @@
 - `KR_CPI`(소비자물가지수)는 한국은행이 아닌 통계청(KOSIS) 발표 항목이라 이번 작업 범위에서 제외 (사용자 확인, INDICATOR_META 항목은 보존)
 - 검증: 2026-07-16 기준금리 결정일 정상 반환 확인
 
-**3. BLS iCalendar 403 — 미해결, 배포 후 확인 필요**
-- `fetch_bls_calendar()`는 2026-06-08 커밋(`f152871`)에서 Chrome User-Agent를 추가했지만 이 환경에서는 여전히 403 (Akamai `Access Denied`)
-- `www.bls.gov`의 모든 페이지(메인 페이지 포함)가 동일하게 403 → User-Agent 문제가 아니라 Akamai의 IP 평판 기반(데이터센터 IP) 차단으로 추정. `api.bls.gov`(다른 호스트)는 200 정상
-- 코드는 예외 발생 시 `[]` 반환 후 계속 진행하도록 이미 안전하게 처리되어 있어 배포에는 영향 없음
-- **다음 작업자 확인 필요**: 배포 후 `POST /api/cron/update-calendar` 호출 시 BLS 항목(CPI/PPI/Employment)이 포함되는지 Render 로그로 확인. 여전히 403이면 대체 소스(예: FRED ALFRED release dates API) 검토 필요
+**3. BLS iCalendar 403 — 호출 제외 처리**
+- `fetch_bls_calendar()`는 2026-06-08 커밋(`f152871`)에서 Chrome User-Agent를 추가했지만 이 환경과 Render 양쪽 모두 여전히 403 (Akamai `Access Denied`)
+- `www.bls.gov`의 모든 페이지(메인 페이지 포함)가 동일하게 403 → User-Agent 문제가 아니라 Akamai의 IP 평판 기반(데이터센터 IP) 차단으로 확인. `api.bls.gov`(다른 호스트)는 200 정상
+- 함수 자체는 보존하되 `update_economic_calendar`의 수집 함수 목록에서 제외 → 매주 불필요한 403 요청 방지
+- 향후 FRED(세인트루이스 연은) Release Dates API로 대체 가능 (CPI release_id=10, PPI=46, Employment Situation=50, `FRED_API_KEY` 필요) — `docs/ai-handoff.md` 다음 작업 후보 참고
+
+---
+
+### 2026-06-11 (2) - 경제지표 캘린더 배포·운영 개시 확인
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Sonnet 4.6 |
+| 변경 파일 | `main.py`, `docs/ai-handoff.md`, `docs/ai-worklog.md` |
+| 커밋 | `4efdacc` (FOMC/BOK 수정) + 이번 커밋 (BLS 제외) |
+
+**진행**
+- `4efdacc` 푸시 → Render 자동 배포 완료 확인 (`GET /api/economic-calendar` 200 정상)
+- cron-job.org에 `POST /api/cron/update-calendar` 잡 등록 (매주 월요일 00:00 UTC, `x-cron-secret` 헤더) 후 수동 실행
+- 응답 `{"status":"ok","updated":3,"errors":[]}` — FOMC 2건(2026-06-17, 2026-07-29), BOK_RATE 1건(2026-07-16) 정상 수집
+- Render 로그에서 `fetch_bls_calendar error: 403 Client Error: Forbidden` 확인 → BLS는 호출 목록에서 제외 (위 항목 참고)
+
+**결정사항**
+- 당분간 경제지표 캘린더는 FOMC(미국 금리결정), BOK_RATE(한국 기준금리)만 운영. 미국 CPI/PPI/고용지표는 FRED API 적용 전까지 보류
 
 ---
 

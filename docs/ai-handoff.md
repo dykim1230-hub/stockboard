@@ -48,18 +48,15 @@
 | Gemini 폴백 3단계 | 완료 (2026-06-05) — 2.5-flash → 2.0-flash → 1.5-flash. 쿼터소진 즉시전환, retryDelay 파싱 |
 | Gemini 2.5-flash-lite 고정 + 뉴스요약 재시도 | 완료 (2026-06-08) — 종료된 1.5/2.0-flash 폴백 제거, 2.5-flash-lite 고정, _gemini_summarize 3회 재시도 추가 |
 | 로그인 후 공백 화면 버그 수정 | 완료 (2026-06-08) — ChartSection stale analysis JSX 제거(ReferenceError 근본 원인), EcCalBoundary Error Boundary 추가, EconomicCalendar 재활성화 |
-| 경제지표 캘린더 | 구현됨 (2026-06-08) + 버그수정 (2026-06-11) — `/api/cron/update-calendar`, `/api/economic-calendar`, FOMC/BOK 파싱 버그 수정. BLS는 403 미해결(배포 후 확인 필요), cron-job.org 잡 등록 미완료 |
+| 경제지표 캘린더 | 구현됨 (2026-06-08) + 버그수정 (2026-06-11) — `/api/cron/update-calendar`, `/api/economic-calendar`, FOMC/BOK 파싱 버그 수정 후 배포·cron-job.org 등록·실행 검증 완료(FOMC 2건, BOK_RATE 1건 정상 수집). BLS(미국 CPI/PPI/Employment)는 www.bls.gov Akamai 차단(403)으로 수집 함수 호출에서 제외, 보류 |
 
 ## 다음 작업 후보
 
-1. **(배포 후 확인) BLS 경제지표 403 문제**
-   - `/api/cron/update-calendar` 호출 후 Render 로그에서 BLS(CPI/PPI/Employment) 항목이 `economic_calendar`에 들어오는지 확인
-   - 여전히 403이면 대체 소스(FRED ALFRED release dates API 등) 검토
+1. **(선택) BLS 경제지표(CPI/PPI/Employment) 재추가**
+   - `fetch_bls_calendar()` 함수는 보존되어 있으나 `/api/cron/update-calendar`에서 호출하지 않음
+   - FRED(세인트루이스 연은) Release Dates API로 교체 검토: CPI(release_id=10), PPI(46), Employment Situation(50). `FRED_API_KEY` 환경변수 필요(무료 발급)
 
-2. **(사용자 작업) cron-job.org 경제캘린더 잡 등록**
-   - URL `https://stockboard-fhh4.onrender.com/api/cron/update-calendar`, POST, Header `x-cron-secret: {CRON_SECRET}`, 매주 월요일 00:00 UTC
-
-3. **PWA 전환**
+2. **PWA 전환**
    - `manifest.json` + `service-worker.js` 추가
 
 > 포트폴리오 수익률 트래킹 — 기존 증권앱 대비 차별점 없음으로 폐기 결정 (2026-06-08)
@@ -103,7 +100,7 @@ bash scripts/post-deploy.sh
 | 날짜 | 2026-06-11 |
 | 작성자 | Claude Sonnet 4.6 |
 | 작업 환경 | macOS. 백엔드는 push → Render 자동배포. 프론트는 firebase deploy --only hosting. |
-| 내용 | 경제지표 캘린더 데이터 소스 점검: ①FOMC 날짜 파싱 버그 수정(월/일 분리된 div 미조합) ②BOK 캘린더를 RSS→통화정책방향 결정회의 일정 페이지 스크래핑으로 교체, KR_CPI는 범위 제외 ③BLS는 403 미해결(Akamai 추정), 배포 후 확인 필요 |
-| 다음 우선순위 | (배포후) BLS 403 확인, cron-job.org 경제캘린더 잡 등록(사용자 작업), PWA 전환 |
+| 내용 | 경제지표 캘린더 데이터 소스 점검 및 운영 개시: ①FOMC 날짜 파싱 버그 수정(월/일 분리된 div 미조합) ②BOK 캘린더를 RSS→통화정책방향 결정회의 일정 페이지 스크래핑으로 교체, KR_CPI는 범위 제외 ③BLS(CPI/PPI/Employment)는 www.bls.gov Akamai 차단(403, Render에서도 재현)으로 호출 제외 ④cron-job.org에 `update-calendar` 잡 등록 및 수동 실행 → FOMC 2건, BOK_RATE 1건 정상 수집 확인 |
+| 다음 우선순위 | (선택) FRED API로 BLS 대체, PWA 전환 |
 | Gemini 모델 현황 | 뉴스레터: 2.5-flash-lite(기본) → 2.5-flash(폴백). Grounding: google_search tool |
-| 주의 | gemini-1.5-flash, gemini-2.0-flash 서비스 종료 확인(2026년 상반기) — 폴백 목록에서 완전 제거. EconomicCalendar는 Firestore 데이터 없으면 숨겨진 상태(return null) 정상이며, 이번 수정으로 FOMC/BOK_RATE 데이터는 채워질 것으로 예상됨(`/api/cron/update-calendar` 실행 후). |
+| 주의 | gemini-1.5-flash, gemini-2.0-flash 서비스 종료 확인(2026년 상반기) — 폴백 목록에서 완전 제거. EconomicCalendar는 현재 FOMC(2026-06-17, 07-29), BOK_RATE(2026-07-16) 데이터로 정상 표시됨. cron-job.org 잡: 매주 월요일 00:00 UTC `POST /api/cron/update-calendar`. |
