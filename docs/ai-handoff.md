@@ -49,14 +49,21 @@
 | Gemini 2.5-flash-lite 고정 + 뉴스요약 재시도 | 완료 (2026-06-08) — 종료된 1.5/2.0-flash 폴백 제거, 2.5-flash-lite 고정, _gemini_summarize 3회 재시도 추가 |
 | 로그인 후 공백 화면 버그 수정 | 완료 (2026-06-08) — ChartSection stale analysis JSX 제거(ReferenceError 근본 원인), EcCalBoundary Error Boundary 추가, EconomicCalendar 재활성화 |
 | 경제지표 캘린더 | 구현됨 (2026-06-08) + 버그수정 (2026-06-11) — `/api/cron/update-calendar`, `/api/economic-calendar`, FOMC/BOK 파싱 버그 수정 후 배포·cron-job.org 등록·실행 검증 완료(FOMC 2건, BOK_RATE 1건 정상 수집). BLS(미국 CPI/PPI/Employment)는 www.bls.gov Akamai 차단(403)으로 수집 함수 호출에서 제외, 보류 |
+| 시장현황 내 경제일정 | 완료 (2026-06-11) — 별도 패널이던 "이번 주 경제 일정"을 시장현황(MarketOverview) 하단에 통합, 일정 여러 개일 때 3초 간격 위로 슬라이드 롤링 표시 (`market-econ-roll`) |
+| 가격 차트 캔들스틱 전환 | 완료 (2026-06-11) — `/api/chart`에 OHLC 추가, `chartjs-chart-financial`로 라인 차트 → 캔들스틱 전환, MA/볼린저는 라인 오버레이 유지 |
 
 ## 다음 작업 후보
 
-1. **(선택) BLS 경제지표(CPI/PPI/Employment) 재추가**
+1. **문의 폼("관리자에게 메일 보내기") 미수신 문제 (진행 중)**
+   - `/api/contact`는 `{"ok":true}`(200) 반환, `_send_resend_email`도 정상 — Resend API 호출 자체는 성공
+   - 그런데 실제 수신 메일함에 도착하지 않음 (사용자 보고: "전송완료로 뜨는데 실제 메일은 오지 않는다")
+   - 다음 단계: Resend 대시보드(resend.com → Emails/Logs)에서 실제 발송 기록·수신 주소·전달 상태 확인 필요. `CONTACT_ADMIN_EMAIL`/`MAIL_FROM` 값이 올바른 수신함을 가리키는지도 확인
+
+2. **(선택) BLS 경제지표(CPI/PPI/Employment) 재추가**
    - `fetch_bls_calendar()` 함수는 보존되어 있으나 `/api/cron/update-calendar`에서 호출하지 않음
    - FRED(세인트루이스 연은) Release Dates API로 교체 검토: CPI(release_id=10), PPI(46), Employment Situation(50). `FRED_API_KEY` 환경변수 필요(무료 발급)
 
-2. **PWA 전환**
+3. **PWA 전환**
    - `manifest.json` + `service-worker.js` 추가
 
 > 포트폴리오 수익률 트래킹 — 기존 증권앱 대비 차별점 없음으로 폐기 결정 (2026-06-08)
@@ -100,7 +107,7 @@ bash scripts/post-deploy.sh
 | 날짜 | 2026-06-11 |
 | 작성자 | Claude Sonnet 4.6 |
 | 작업 환경 | macOS. 백엔드는 push → Render 자동배포. 프론트는 firebase deploy --only hosting. |
-| 내용 | 경제지표 캘린더 데이터 소스 점검 및 운영 개시: ①FOMC 날짜 파싱 버그 수정(월/일 분리된 div 미조합) ②BOK 캘린더를 RSS→통화정책방향 결정회의 일정 페이지 스크래핑으로 교체, KR_CPI는 범위 제외 ③BLS(CPI/PPI/Employment)는 www.bls.gov Akamai 차단(403, Render에서도 재현)으로 호출 제외 ④cron-job.org에 `update-calendar` 잡 등록 및 수동 실행 → FOMC 2건, BOK_RATE 1건 정상 수집 확인 |
-| 다음 우선순위 | (선택) FRED API로 BLS 대체, PWA 전환 |
+| 내용 | (1) 경제지표 캘린더 데이터 소스 점검 및 운영 개시: FOMC/BOK 파싱 버그 수정, BLS 호출 제외, cron-job.org 등록·검증 완료. (2) 시장현황(MarketOverview)에 "이번 주 경제 일정"을 통합 — 일정 여러 개일 때 3초 간격 슬라이드 롤링. (3) 가격 차트를 라인 → 캔들스틱(chartjs-chart-financial)으로 전환, `/api/chart`에 OHLC 추가. 커밋 `3ea2c70`, 백엔드/프론트 배포 및 OHLC 응답 확인 완료. |
+| 다음 우선순위 | 문의 폼 메일 미수신 문제(진행 중, Resend 대시보드 확인 필요), (선택) FRED API로 BLS 대체, PWA 전환 |
 | Gemini 모델 현황 | 뉴스레터: 2.5-flash-lite(기본) → 2.5-flash(폴백). Grounding: google_search tool |
-| 주의 | gemini-1.5-flash, gemini-2.0-flash 서비스 종료 확인(2026년 상반기) — 폴백 목록에서 완전 제거. EconomicCalendar는 현재 FOMC(2026-06-17, 07-29), BOK_RATE(2026-07-16) 데이터로 정상 표시됨. cron-job.org 잡: 매주 월요일 00:00 UTC `POST /api/cron/update-calendar`. |
+| 주의 | gemini-1.5-flash, gemini-2.0-flash 서비스 종료 확인(2026년 상반기) — 폴백 목록에서 완전 제거. EconomicCalendar는 현재 FOMC(2026-06-17, 07-29), BOK_RATE(2026-07-16) 데이터로 정상 표시됨. cron-job.org 잡: 매주 월요일 00:00 UTC `POST /api/cron/update-calendar`. 캔들스틱 차트는 `chartjs-chart-financial`(CDN) 의존 — 차트 라이브러리 변경 시 영향받음. |

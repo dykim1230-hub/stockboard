@@ -209,6 +209,8 @@ Value: v=DMARC1; p=none;
 
 | 날짜 | 커밋 | 내용 |
 | --- | --- | --- |
+| 2026-06-11 | `3ea2c70` | 시장현황에 경제일정 통합(3초 슬라이드 롤링), 가격 차트 라인→캔들스틱 전환(`/api/chart` OHLC 추가) |
+| 2026-06-11 | `4731b59`, `4efdacc` | 경제지표 캘린더 FOMC/BOK 파싱 버그 수정, BLS 호출 제외, cron-job.org 운영 개시 |
 | 2026-06-08 | `e180f66` | 로그인 후 공백 화면 버그 수정 — ChartSection stale analysis JSX(ReferenceError) 제거, EcCalBoundary 추가, EconomicCalendar 재활성화 |
 | 2026-06-08 | `8aebff1` | Gemini 2.5-flash-lite 고정, 뉴스요약 재시도 3회 추가, 종료된 폴백 모델 정리 |
 | 2026-06-05 | `e394a30` | 웹 AI 의견 제거, 문의 폼 추가, Gemini 폴백 3단계 |
@@ -238,6 +240,7 @@ Value: v=DMARC1; p=none;
 
 ## 11. 다음 작업
 
+- [ ] **(최우선, 2026-06-11)** 문의 폼("관리자에게 메일 보내기") 메일 미수신 문제 — `/api/contact`는 `{"ok":true}` 반환(Resend API 호출 자체는 성공)하지만 실제 메일이 도착하지 않음. Resend 대시보드(Emails/Logs)에서 발송 기록·수신 주소·전달 상태 확인 필요, `CONTACT_ADMIN_EMAIL`/`MAIL_FROM` 값 점검
 - [ ] Resend에서 `ahdoyoon.site` DNS 인증 완료
 - [ ] Render 환경변수에 `RESEND_API_KEY`, `MAIL_FROM` 추가
 - [x] 회원 설정 UI 추가

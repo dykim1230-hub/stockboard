@@ -11,6 +11,35 @@
 
 ## 로그
 
+### 2026-06-11 (3) - 시장현황 경제일정 통합 + 가격 차트 캔들스틱 전환
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Sonnet 4.6 |
+| 변경 파일 | `index.html`, `style.css`, `main.py` |
+| 백업 | `index_backup_20260611.html`, `main_backup_20260611.py` |
+| 커밋 | `3ea2c70` |
+
+**1. 시장현황(MarketOverview)에 경제일정 통합**
+- 기존 별도 패널이었던 "📅 이번 주 경제 일정"(`EconomicCalendar`/`EcCalBoundary`/`ImpactDots`)을 제거하고, 시장현황 패널 하단에 통합
+- `/api/economic-calendar?weeks=2`를 MarketOverview에서 직접 fetch
+- 처음에는 한 줄씩 나열 → 사용자 피드백으로 칩(pill) 형태 + 아이콘으로 변경 → 다시 사용자 피드백으로 최종적으로 일정이 여러 개일 때 3초 간격으로 위로 슬라이드되며 한 줄씩 롤링되는 형태로 확정 (`market-econ-roll`, `econRollIn` keyframe)
+- 비로그인 사용자도 시장현황은 보이므로 경제일정도 자동으로 노출 범위 확대됨
+
+**2. 가격 차트 라인 → 캔들스틱 전환**
+- 사용자 요청: "종목 가격 그래프를 캔들 그래프로 변경"
+- `main.py`의 `/api/chart`가 `1. open`/`2. high`/`3. low`도 반환하도록 수정 (기존엔 close/volume만)
+- `index.html`: `chartjs-chart-financial` + `chartjs-adapter-date-fns` CDN 추가, `ChartSection`의 메인 데이터셋을 `type:'candlestick'`(상승 초록/하락 빨강)으로 교체
+- MA5/MA20/MA60/볼린저밴드는 `type:'line'` 오버레이로 유지, x축은 `category` → `time` 스케일로 변경 (모든 데이터셋 `{x: timestamp, ...}` 형식)
+- 툴팁에 시가/고가/저가/종가 표시하도록 콜백 커스터마이징
+- 거래량 바 차트는 기존 category 라벨 그대로 사용 (변경 없음)
+- 배포 후 `/api/chart?symbol=...` 응답에 OHLC 필드 포함 확인 완료
+
+**별도 진행 중 이슈 (미해결)**
+- 사용자가 "관리자에게 메일 보내기" 문의 폼이 "전송완료로 뜨는데 실제 메일은 오지 않는다"고 보고
+- `/api/contact`는 `{"ok":true}`(200) 반환 — Resend API 호출 자체는 성공(<400)
+- 코드(`_send_resend_email`, `/api/contact`)는 정상으로 보임 — `CONTACT_ADMIN_EMAIL`/`MAIL_FROM` 수신 주소 또는 Resend 대시보드의 실제 발송/차단 로그 확인 필요 (사용자에게 Resend 대시보드 확인 요청, 아직 회신 없음)
+
 ### 2026-06-11 - 경제지표 캘린더 데이터 소스 3종 점검 및 버그 수정
 
 | 항목 | 내용 |
