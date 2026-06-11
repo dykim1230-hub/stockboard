@@ -783,6 +783,54 @@ body {
     gap: 0.05rem;
 }
 
+.market-econ-roll {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.market-econ-icon {
+    font-size: 1rem;
+    color: var(--accent-color);
+    flex-shrink: 0;
+}
+
+.market-econ-roll-window {
+    flex: 1;
+    height: 1.3rem;
+    overflow: hidden;
+    position: relative;
+}
+
+.market-econ-roll-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 1.3rem;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    animation: econRollIn 0.4s ease-out;
+}
+
+@keyframes econRollIn {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.market-econ-date {
+    color: var(--text-muted);
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.market-econ-name {
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* Landing Page */
 .landing-page {
     display: flex;
@@ -1156,6 +1204,14 @@ body {
     .market-ticker-item {
         min-width: 95px;
         padding: 0.7rem 0.9rem;
+    }
+
+    .market-econ-roll {
+        padding: 0.5rem 1rem;
+    }
+
+    .market-econ-roll-item {
+        font-size: 0.72rem;
     }
 
     .market-ticker-price {

@@ -25,6 +25,8 @@
     
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
 
     <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -814,6 +816,9 @@ const ChartSection = ({ activeStock }) => {
                 const entries = Object.entries(tsData)
                     .map(([date, values]) => ({
                         date,
+                        open: parseFloat(values['1. open']),
+                        high: parseFloat(values['2. high']),
+                        low: parseFloat(values['3. low']),
                         close: parseFloat(values['4. close']),
                         volume: parseInt(values['5. volume'] || 0, 10),
                     }))
@@ -869,51 +874,41 @@ const ChartSection = ({ activeStock }) => {
         }
 
         const labels = filtered.map(d => d.date);
+        const xs = filtered.map(d => new Date(d.date).getTime());
         const values = filtered.map(d => d.close);
         const volumes = filtered.map(d => d.volume);
         const cur = activeStock?.currency || 'USD';
 
-        const isPositive = values[values.length - 1] >= values[0];
-        const lineColor = isPositive ? '#10b981' : '#ef4444';
-        const gradientColor = isPositive ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)';
-
         if (chartInstance.current) chartInstance.current.destroy();
 
         const ctx = chartRef.current.getContext('2d');
-        const gradient = ctx.createLinearGradient(0, 0, 0, 300);
-        gradient.addColorStop(0, gradientColor);
-        gradient.addColorStop(1, 'rgba(0,0,0,0)');
 
         const datasets = [{
-            label: 'Price',
-            data: values,
-            borderColor: lineColor,
-            backgroundColor: gradient,
-            borderWidth: 2,
-            pointRadius: 0,
-            pointHoverRadius: 5,
-            fill: true,
-            tension: 0.1,
+            label: '캔들',
+            type: 'candlestick',
+            data: filtered.map((d, i) => ({ x: xs[i], o: d.open, h: d.high, l: d.low, c: d.close })),
+            backgroundColors: { up: 'rgba(16,185,129,0.5)', down: 'rgba(239,68,68,0.5)', unchanged: 'rgba(148,163,184,0.5)' },
+            borderColors: { up: '#10b981', down: '#ef4444', unchanged: '#94a3b8' },
         }];
 
         if (indicators.ma5) {
-            datasets.push({ label: 'MA5', data: calcMA(values, 5), borderColor: '#f59e0b', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.1 });
+            datasets.push({ label: 'MA5', type: 'line', data: calcMA(values, 5).map((v, i) => ({ x: xs[i], y: v })), borderColor: '#f59e0b', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.1 });
         }
         if (indicators.ma20) {
-            datasets.push({ label: 'MA20', data: calcMA(values, 20), borderColor: '#3b82f6', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.1 });
+            datasets.push({ label: 'MA20', type: 'line', data: calcMA(values, 20).map((v, i) => ({ x: xs[i], y: v })), borderColor: '#3b82f6', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.1 });
         }
         if (indicators.ma60) {
-            datasets.push({ label: 'MA60', data: calcMA(values, 60), borderColor: '#a855f7', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.1 });
+            datasets.push({ label: 'MA60', type: 'line', data: calcMA(values, 60).map((v, i) => ({ x: xs[i], y: v })), borderColor: '#a855f7', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.1 });
         }
         if (indicators.bb) {
             const bb = calcBB(values);
-            datasets.push({ label: '볼린저', data: bb.map(b => b.upper), borderColor: 'rgba(148,163,184,0.7)', borderWidth: 1, borderDash: [4, 3], pointRadius: 0, fill: false, tension: 0.1 });
-            datasets.push({ label: '__bb_lower__', data: bb.map(b => b.lower), borderColor: 'rgba(148,163,184,0.7)', borderWidth: 1, borderDash: [4, 3], pointRadius: 0, fill: false, tension: 0.1 });
+            datasets.push({ label: '볼린저', type: 'line', data: bb.map((b, i) => ({ x: xs[i], y: b.upper })), borderColor: 'rgba(148,163,184,0.7)', borderWidth: 1, borderDash: [4, 3], pointRadius: 0, fill: false, tension: 0.1 });
+            datasets.push({ label: '__bb_lower__', type: 'line', data: bb.map((b, i) => ({ x: xs[i], y: b.lower })), borderColor: 'rgba(148,163,184,0.7)', borderWidth: 1, borderDash: [4, 3], pointRadius: 0, fill: false, tension: 0.1 });
         }
 
         chartInstance.current = new Chart(ctx, {
-            type: 'line',
-            data: { labels, datasets },
+            type: 'candlestick',
+            data: { datasets },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -935,12 +930,28 @@ const ChartSection = ({ activeStock }) => {
                         padding: 10,
                         filter: item => item.parsed.y !== null && !item.dataset.label.startsWith('__'),
                         callbacks: {
-                            label: ctx => `${ctx.dataset.label}: ${formatTooltip(ctx.parsed.y, cur)}`
+                            label: ctx => {
+                                if (ctx.dataset.type === 'candlestick') {
+                                    const o = ctx.raw;
+                                    return [
+                                        `시가 ${formatTooltip(o.o, cur)}`,
+                                        `고가 ${formatTooltip(o.h, cur)}`,
+                                        `저가 ${formatTooltip(o.l, cur)}`,
+                                        `종가 ${formatTooltip(o.c, cur)}`,
+                                    ];
+                                }
+                                return `${ctx.dataset.label}: ${formatTooltip(ctx.parsed.y, cur)}`;
+                            }
                         }
                     }
                 },
                 scales: {
-                    x: { grid: { display: false, drawBorder: false }, ticks: { maxTicksLimit: 6, color: '#94a3b8' } },
+                    x: {
+                        type: 'time',
+                        time: { unit: timeframe === '1Y' ? 'month' : timeframe === '3M' ? 'week' : 'day' },
+                        grid: { display: false, drawBorder: false },
+                        ticks: { maxTicksLimit: 6, color: '#94a3b8' }
+                    },
                     y: { grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false }, ticks: { color: '#94a3b8', callback: val => formatChartTick(val, cur) } }
                 }
             }
@@ -1116,6 +1127,8 @@ const MarketOverview = () => {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [updatedAt, setUpdatedAt] = useState(null);
+    const [econEvents, setEconEvents] = useState([]);
+    const [econIndex, setEconIndex] = useState(0);
 
     const load = useCallback(async () => {
         try {
@@ -1137,10 +1150,31 @@ const MarketOverview = () => {
         return () => clearInterval(id);
     }, [load]);
 
+    useEffect(() => {
+        fetch(`${BASE_URL}/economic-calendar?weeks=2`)
+            .then(res => res.ok ? res.json() : [])
+            .then(json => setEconEvents(Array.isArray(json) ? json : []))
+            .catch(() => setEconEvents([]));
+    }, []);
+
+    useEffect(() => {
+        if (econEvents.length <= 1) return;
+        const id = setInterval(() => {
+            setEconIndex(i => (i + 1) % econEvents.length);
+        }, 3000);
+        return () => clearInterval(id);
+    }, [econEvents]);
+
     const fmtPrice = (item) => {
         if (item.symbol === 'KRW=X') return Math.round(item.price).toLocaleString('ko-KR') + '원';
         if (item.currency === 'KRW') return Math.round(item.price).toLocaleString('ko-KR');
         return item.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+
+    const fmtEventDate = (dateStr) => {
+        const days = ['일', '월', '화', '수', '목', '금', '토'];
+        const d = new Date(dateStr + 'T00:00:00+09:00');
+        return `${dateStr.slice(5).replace('-', '.')}(${days[d.getDay()]})`;
     };
 
     return (
@@ -1180,6 +1214,17 @@ const MarketOverview = () => {
                     })}
                 </div>
             ) : null}
+            {econEvents.length > 0 && (
+                <div className="market-econ-roll">
+                    <span className="material-symbols-outlined market-econ-icon">event</span>
+                    <div className="market-econ-roll-window">
+                        <div key={econEvents[econIndex].id} className="market-econ-roll-item">
+                            <span className="market-econ-date">{fmtEventDate(econEvents[econIndex].date)}</span>
+                            <span className="market-econ-name">{econEvents[econIndex].name_ko}</span>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -1366,97 +1411,6 @@ const ContactModal = ({ isOpen, onClose }) => {
                     )}
                 </div>
             </div>
-        </div>
-    );
-};
-
-class EcCalBoundary extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = { hasError: false };
-    }
-    static getDerivedStateFromError() {
-        return { hasError: true };
-    }
-    componentDidCatch(error, info) {
-        console.error('[EcCal] render error:', error.message, info && info.componentStack);
-    }
-    render() {
-        if (this.state.hasError) return null;
-        return this.props.children;
-    }
-}
-
-const ImpactDots = ({ impact }) => {
-    if (impact === 'high') {
-        return (
-            <span style={{display:'inline-flex', gap:'2px', marginLeft:'6px'}}>
-                <span style={{width:'6px', height:'6px', borderRadius:'50%', background:'#ef4444', display:'inline-block'}}></span>
-                <span style={{width:'6px', height:'6px', borderRadius:'50%', background:'#ef4444', display:'inline-block'}}></span>
-                <span style={{width:'6px', height:'6px', borderRadius:'50%', background:'#ef4444', display:'inline-block'}}></span>
-            </span>
-        );
-    }
-    if (impact === 'medium') {
-        return (
-            <span style={{display:'inline-flex', gap:'2px', marginLeft:'6px'}}>
-                <span style={{width:'6px', height:'6px', borderRadius:'50%', background:'#f97316', display:'inline-block'}}></span>
-                <span style={{width:'6px', height:'6px', borderRadius:'50%', background:'#f97316', display:'inline-block'}}></span>
-            </span>
-        );
-    }
-    return null;
-};
-
-const EconomicCalendar = () => {
-    const [events, setEvents] = React.useState([]);
-    const [loading, setLoading] = React.useState(true);
-
-    React.useEffect(() => {
-        fetch(BASE_URL + '/economic-calendar?weeks=2')
-            .then(function(r) { return r.ok ? r.json() : []; })
-            .then(function(data) { setEvents(Array.isArray(data) ? data : []); setLoading(false); })
-            .catch(function() { setLoading(false); });
-    }, []);
-
-    if (loading || events.length === 0) return null;
-
-    const today = new Date().toISOString().slice(0, 10);
-    const grouped = {};
-    events.forEach(function(e) {
-        if (!grouped[e.date]) grouped[e.date] = [];
-        grouped[e.date].push(e);
-    });
-    const sortedDates = Object.keys(grouped).sort();
-
-    return (
-        <div className="glass-panel" style={{marginBottom:'1.5rem', padding:'1.2rem 1.4rem'}}>
-            <h2 style={{margin:'0 0 1rem', fontSize:'1rem', fontWeight:700, color:'var(--text-primary)'}}>
-                {'📅 이번 주 경제 일정'}
-            </h2>
-            {sortedDates.map(function(date) {
-                var items = grouped[date];
-                return (
-                    <div key={date} style={{marginBottom:'0.75rem'}}>
-                        <div style={{display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'0.35rem'}}>
-                            <span style={{fontSize:'0.8rem', fontWeight:700, color:'var(--text-secondary)'}}>{date}</span>
-                            {date === today && (
-                                <span style={{fontSize:'0.7rem', background:'#2563eb', color:'#fff', borderRadius:'4px', padding:'1px 6px', fontWeight:700}}>오늘</span>
-                            )}
-                        </div>
-                        {items.map(function(e) {
-                            return (
-                                <div key={e.id} style={{display:'flex', alignItems:'center', gap:'0.6rem', padding:'5px 0', borderBottom:'1px solid rgba(255,255,255,0.05)', fontSize:'0.85rem'}}>
-                                    <span style={{fontSize:'0.85rem', color:'var(--text-muted)'}}>{e.country}</span>
-                                    <span style={{color:'var(--text-primary)', flex:1}}>{e.name_ko}</span>
-                                    <span style={{color:'var(--text-muted)', fontSize:'0.78rem', minWidth:'40px', textAlign:'right'}}>{e.time_kst}</span>
-                                    <ImpactDots impact={e.impact} />
-                                </div>
-                            );
-                        })}
-                    </div>
-                );
-            })}
         </div>
     );
 };
@@ -1708,7 +1662,6 @@ const App = () => {
                     즐겨찾기는 최대 7개까지만 추가할 수 있습니다.
                 </div>
             )}
-            <EcCalBoundary><EconomicCalendar /></EcCalBoundary>
             <div className="main-grid">
                 <ChartSection activeStock={activeStock} />
                 <NewsSection activeStock={activeStock} />
