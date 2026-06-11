@@ -1204,54 +1204,43 @@ def fetch_bls_calendar() -> list:
 
 
 def fetch_bok_calendar() -> list:
-    """한국은행 RSS에서 기준금리/소비자물가 발표 일정 수집."""
+    """한국은행 통화정책방향 결정회의 일정 페이지에서 기준금리 결정일 수집.
+
+    KR_CPI(소비자물가지수)는 한국은행이 아닌 통계청(KOSIS) 발표 항목이라
+    이 함수의 데이터 소스(BOK)에서는 다루지 않는다.
+    """
     try:
-        import feedparser
-        from calendar import timegm
-        feed = feedparser.parse(
-            "https://www.bok.or.kr/portal/bbs/B0000338/list.do"
-            "?menuNo=200069&pageIndex=1&searchCnd=1&searchStr=&rssYn=Y"
+        resp = requests.get(
+            "https://www.bok.or.kr/portal/singl/crncyPolicyDrcMtg/listYear.do?mtgSe=A&menuNo=200755",
+            timeout=15,
+            headers={"User-Agent": "Mozilla/5.0"},
         )
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "lxml")
         today = datetime.now(ZoneInfo("Asia/Seoul")).date()
         cutoff = today + timedelta(weeks=8)
-        keyword_map = [
-            ("기준금리", "BOK_RATE"),
-            ("소비자물가", "KR_CPI"),
-        ]
+        year = today.year
+        meta = INDICATOR_META["BOK_RATE"]
         results = []
-        seen_ids = set()
-        for entry in feed.entries:
-            title = entry.get("title", "")
-            indicator = None
-            for keyword, code in keyword_map:
-                if keyword in title:
-                    indicator = code
-                    break
-            if not indicator:
+        for th in soup.select("th[scope='row']"):
+            date_text = th.get_text(strip=True)
+            m = re.match(r"(\d{1,2})월\s*(\d{1,2})일", date_text)
+            if not m:
                 continue
-            pub = entry.get("published_parsed") or entry.get("updated_parsed")
-            if pub is None:
+            month, day = int(m.group(1)), int(m.group(2))
+            try:
+                event_date = datetime(year, month, day).date()
+            except ValueError:
                 continue
-            event_date = (
-                datetime.utcfromtimestamp(timegm(pub))
-                .replace(tzinfo=ZoneInfo("UTC"))
-                .astimezone(ZoneInfo("Asia/Seoul"))
-                .date()
-            )
             if not (today <= event_date <= cutoff):
                 continue
             date_str = event_date.strftime("%Y-%m-%d")
-            doc_id = f"{date_str}-KR-{indicator}"
-            if doc_id in seen_ids:
-                continue
-            seen_ids.add(doc_id)
-            meta = INDICATOR_META[indicator]
             results.append({
-                "id": doc_id,
+                "id": f"{date_str}-KR-BOK_RATE",
                 "date": date_str,
                 "time_kst": "TBD",
                 "country": "KR",
-                "indicator": indicator,
+                "indicator": "BOK_RATE",
                 "name_ko": meta["name_ko"],
                 "impact": meta["impact"],
                 "updated_at": datetime.now(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S"),
@@ -1283,15 +1272,16 @@ def fetch_fomc_calendar() -> list:
             m = re.search(r"\d{4}", year_text)
             year = int(m.group()) if m else current_year
             for meeting_div in panel.select(".fomc-meeting"):
+                month_div = meeting_div.select_one(".fomc-meeting__month")
                 date_div = meeting_div.select_one(".fomc-meeting__date")
-                if not date_div:
+                if not month_div or not date_div:
                     continue
+                month_str = month_div.get_text(strip=True)
                 date_text = date_div.get_text(strip=True)
-                month_match = re.search(r"([A-Za-z]+)\s+(\d+)(?:-(\d+))?", date_text)
-                if not month_match:
+                day_match = re.search(r"(\d+)(?:-(\d+))?", date_text)
+                if not day_match:
                     continue
-                month_str = month_match.group(1)
-                end_day = month_match.group(3) or month_match.group(2)
+                end_day = day_match.group(2) or day_match.group(1)
                 try:
                     event_date = datetime.strptime(f"{month_str} {end_day} {year}", "%B %d %Y").date()
                 except ValueError:

@@ -11,6 +11,38 @@
 
 ## 로그
 
+### 2026-06-11 - 경제지표 캘린더 데이터 소스 3종 점검 및 버그 수정
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Sonnet 4.6 |
+| 변경 파일 | `main.py` |
+| 백업 | `main_backup_20260611.py` |
+
+**배경**
+- 2026-06-08에 경제지표 캘린더 기능(`fetch_bls_calendar`, `fetch_bok_calendar`, `fetch_fomc_calendar`, `/api/cron/update-calendar`, `/api/economic-calendar`)이 구현됐으나 `docs/ai-handoff.md`에는 "다음 작업 1순위"로 남아있어 상태 점검 겸 실제 동작 여부를 로컬에서 검증함
+
+**1. FOMC 파싱 버그 수정**
+- 증상: `fetch_fomc_calendar()`가 항상 빈 배열 반환
+- 원인: `.fomc-meeting__date`에는 "27-28" 같은 일자만 있고 월(`January` 등)은 별도 `.fomc-meeting__month` div에 있음 → 기존 코드는 date 텍스트에서만 `[A-Za-z]+\s+\d+` 정규식을 찾았기 때문에 항상 매칭 실패 → 모든 회의가 스킵됨
+- 수정: `.fomc-meeting__month`에서 월, `.fomc-meeting__date`에서 일자를 각각 읽어 조합
+- 검증: 2026-06-17, 2026-07-29 FOMC 일정 정상 반환 확인
+
+**2. BOK 캘린더 데이터 소스 교체**
+- 증상: 기존 URL(`B0000338?menuNo=200069&rssYn=Y`)이 RSS가 아닌 "지역경제보고서" 게시판 HTML을 반환 → `feedparser` 0건
+- 원인: BOK 보도자료 RSS(`P0000559/news.rss`, `B0000552/news.rss`)는 모두 *과거* 발표 이력만 제공 → 미래 일정 캘린더에 사용 불가
+- 수정: BOK 공식 "통화정책방향 결정회의 일정" 페이지(`crncyPolicyDrcMtg/listYear.do?mtgSe=A&menuNo=200755`)를 스크래핑하여 `BOK_RATE`(기준금리 결정) 미래 일정 수집
+- `KR_CPI`(소비자물가지수)는 한국은행이 아닌 통계청(KOSIS) 발표 항목이라 이번 작업 범위에서 제외 (사용자 확인, INDICATOR_META 항목은 보존)
+- 검증: 2026-07-16 기준금리 결정일 정상 반환 확인
+
+**3. BLS iCalendar 403 — 미해결, 배포 후 확인 필요**
+- `fetch_bls_calendar()`는 2026-06-08 커밋(`f152871`)에서 Chrome User-Agent를 추가했지만 이 환경에서는 여전히 403 (Akamai `Access Denied`)
+- `www.bls.gov`의 모든 페이지(메인 페이지 포함)가 동일하게 403 → User-Agent 문제가 아니라 Akamai의 IP 평판 기반(데이터센터 IP) 차단으로 추정. `api.bls.gov`(다른 호스트)는 200 정상
+- 코드는 예외 발생 시 `[]` 반환 후 계속 진행하도록 이미 안전하게 처리되어 있어 배포에는 영향 없음
+- **다음 작업자 확인 필요**: 배포 후 `POST /api/cron/update-calendar` 호출 시 BLS 항목(CPI/PPI/Employment)이 포함되는지 Render 로그로 확인. 여전히 403이면 대체 소스(예: FRED ALFRED release dates API) 검토 필요
+
+---
+
 ### 2026-06-08 (2) - 로그인 후 공백 화면 버그 수정, EconomicCalendar ErrorBoundary 추가
 
 | 항목 | 내용 |
