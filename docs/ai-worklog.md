@@ -11,6 +11,60 @@
 
 ## 로그
 
+### 2026-06-12 - ahdoyoon.site OAuth 설정 완료 + UX 개선 다수 + 온보딩 플로우 추가
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Sonnet 4.6 |
+| 변경 파일 | `index.html`, `style.css`, `main.py` |
+| 백업 | `index_backup_20260612.html`, `main_backup_20260612.py` |
+| 커밋 | `86389e5`, `a27f4b4`, `83e21e9`, `bcb2ce1`, `0e36c7a` |
+
+**1. ahdoyoon.site Google OAuth 설정 완료**
+- Google Cloud Console 승인된 리디렉션 URI: `https://ahdoyoon.site/__/auth/handler`, `https://portfolio-4ffcf.firebaseapp.com/__/auth/handler` 등록
+- Google Cloud Console 승인된 JavaScript 원본: `https://ahdoyoon.site` 추가
+- Firebase Console > Authentication > Authorized domains: `ahdoyoon.site` 추가
+- 결과: `ahdoyoon.site` 도메인에서도 Google 소셜 로그인 정상 작동
+
+**2. 문의 메일 미수신 문제 해결**
+- 원인: `CONTACT_ADMIN_EMAIL` 환경변수 미설정 → `MAIL_FROM`(`noreply@ahdoyoon.site`)으로 발송 → 받는 사람 없음
+- 해결: Render 환경변수에 `CONTACT_ADMIN_EMAIL` 추가 (실제 수신 이메일 주소 설정)
+- 확인: Resend 대시보드에서 TO 주소 정상 확인
+
+**3. 경제일정 롤 레이아웃 CSS 강화**
+- 현상: 금주 일정이 1줄이어야 하는데 2줄로 표시되고 폰트 달라짐
+- 수정: `flex-direction: row; flex-wrap: nowrap` 명시, `min-width: 0` 추가, `white-space: nowrap` 자식 요소에도 명시, `font-family: var(--font-main)` 지정
+- 파일: `style.css`
+
+**4. 차트 이동평균선 레이블 한국어 변경**
+- MA5 → 5일선, MA20 → 20일선, MA60 → 60일선
+- 차트 범례, 버튼 UI, 랜딩 기능 소개 문구 모두 변경
+- 파일: `index.html`
+
+**5. 뉴스레터 추천하기 버튼 추가**
+- 뉴스레터 이메일 하단에 `📨 친구에게 MarketPulse 추천하기` 버튼 추가
+- href: `https://ahdoyoon.site/invite?ref={uid}` (uid 기반 추천 링크)
+- 기존 단순 공유 섹션을 버튼 형태로 교체, Gmail/Outlook 호환 인라인 스타일만 사용
+- 이메일 내 URL 전체 `portfolio-4ffcf.web.app` → `ahdoyoon.site` 업데이트
+- 파일: `main.py`
+
+**6. 랜딩 페이지 개선 + 가입 후 온보딩 플로우 추가**
+- `?ref=` URL 파라미터 읽어 `sessionStorage.referrer_uid` 저장
+- ref 있을 때 히어로 문구 "지인이 매일 아침 받아보는 주식 브리핑입니다", CTA "나도 받아보기" 조건부 렌더링
+- 샘플 뉴스레터 목업 섹션 추가 (삼성전자 예시, "샘플" 배지)
+- 기능 소개 카드 4개 desc 사용자 상황 문구로 교체
+- 기능 카드 아래 CTA 버튼 재배치 추가
+- `OnboardingFlow` 컴포넌트 신규 추가 (STEP1 종목 등록 / STEP2 수신 시간 / STEP3 완료)
+- 가입 완료 후 메인 대신 온보딩으로 전환, STEP3 완료 시 Firestore에 favorites / emailDigest.hour / referredBy 저장
+- `AuthModal`에 `onSignUp` 콜백 prop 추가, 이메일·Google 가입 시 각각 호출
+- 파일: `index.html`
+
+**결정사항**
+- 추천 랜딩 페이지(`/invite`) 자체는 미구현 — Firebase Hosting 모든 경로 → index.html rewrite이므로 링크 클릭 시 랜딩 페이지로 이동은 되나 추천인 처리 로직은 sessionStorage 저장 방식으로 처리됨
+- 온보딩 완료 후 favorites/emailDigest는 Firestore 직접 저장 후 App state에도 반영
+
+---
+
 ### 2026-06-11 (3) - 시장현황 경제일정 통합 + 가격 차트 캔들스틱 전환
 
 | 항목 | 내용 |
