@@ -947,13 +947,13 @@ const ChartSection = ({ activeStock }) => {
         }];
 
         if (indicators.ma5) {
-            datasets.push({ label: 'MA5', type: 'line', data: calcMA(values, 5).map((v, i) => ({ x: xs[i], y: v })), borderColor: '#f59e0b', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.1 });
+            datasets.push({ label: '5일선', type: 'line', data: calcMA(values, 5).map((v, i) => ({ x: xs[i], y: v })), borderColor: '#f59e0b', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.1 });
         }
         if (indicators.ma20) {
-            datasets.push({ label: 'MA20', type: 'line', data: calcMA(values, 20).map((v, i) => ({ x: xs[i], y: v })), borderColor: '#3b82f6', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.1 });
+            datasets.push({ label: '20일선', type: 'line', data: calcMA(values, 20).map((v, i) => ({ x: xs[i], y: v })), borderColor: '#3b82f6', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.1 });
         }
         if (indicators.ma60) {
-            datasets.push({ label: 'MA60', type: 'line', data: calcMA(values, 60).map((v, i) => ({ x: xs[i], y: v })), borderColor: '#a855f7', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.1 });
+            datasets.push({ label: '60일선', type: 'line', data: calcMA(values, 60).map((v, i) => ({ x: xs[i], y: v })), borderColor: '#a855f7', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.1 });
         }
         if (indicators.bb) {
             const bb = calcBB(values);
@@ -1069,9 +1069,9 @@ const ChartSection = ({ activeStock }) => {
     }
 
     const indicatorConfig = [
-        { key: 'ma5',  label: 'MA5',  color: '#f59e0b', tip: '5일 이동평균선' },
-        { key: 'ma20', label: 'MA20', color: '#3b82f6', tip: '20일 이동평균선' },
-        { key: 'ma60', label: 'MA60', color: '#a855f7', tip: '60일 이동평균선' },
+        { key: 'ma5',  label: '5일선',  color: '#f59e0b', tip: '5일 이동평균선' },
+        { key: 'ma20', label: '20일선', color: '#3b82f6', tip: '20일 이동평균선' },
+        { key: 'ma60', label: '60일선', color: '#a855f7', tip: '60일 이동평균선' },
         { key: 'bb',   label: 'BB',   color: '#94a3b8', tip: '볼린저 밴드 — 가격 변동 범위' },
         { key: 'vol',  label: '거래량', color: '#10b981', tip: '일별 거래량' },
     ];
@@ -1663,7 +1663,7 @@ const App = () => {
                     <div className="landing-features">
                         {[
                             { icon: 'monitoring', title: '실시간 시세', desc: '국내·해외 관심 종목의 현재가, 등락률, 52주 범위를 한눈에 확인' },
-                            { icon: 'candlestick_chart', title: '기술 지표 차트', desc: 'MA5/MA20/MA60, 볼린저밴드, 거래량 바를 지원하는 인터랙티브 차트' },
+                            { icon: 'candlestick_chart', title: '기술 지표 차트', desc: '5일선/20일선/60일선, 볼린저밴드, 거래량 바를 지원하는 인터랙티브 차트' },
                             { icon: 'smart_toy', title: 'AI 투자 의견', desc: 'Gemini AI가 최신 뉴스를 바탕으로 종목별 투자 의견을 실시간 분석' },
                             { icon: 'mark_email_read', title: '이메일 다이제스트', desc: '매일 원하는 시간에 AI가 요약한 관심 종목 뉴스레터 자동 발송' },
                         ].map(f => (
