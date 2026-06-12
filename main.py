@@ -846,16 +846,20 @@ def _build_digest_html(user_email: str, summaries: list, sent_at: datetime, uid:
       <div style="background:#ffffff;border-radius:10px;padding:28px;">
         <h1 style="margin:0 0 6px;font-size:24px;color:#111827;">MarketPulse 일일 요약</h1>
         <p style="margin:0 0 14px;font-size:13px;color:#6b7280;">{html.escape(user_email)} · {sent_label} Asia/Seoul</p>
-        <a href="https://portfolio-4ffcf.web.app"
+        <a href="https://ahdoyoon.site"
            style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:11px 26px;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:20px;">
           대시보드 바로가기 →
         </a>
         {economic_calendar_html}{body}
         <div style="margin-top:24px;text-align:center;">
-          <a href="https://portfolio-4ffcf.web.app"
+          <a href="https://ahdoyoon.site"
              style="display:inline-block;background:#1e293b;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:600;">
             📈 MarketPulse 열기
           </a>
+        </div>
+        <div style="margin-top:20px;padding:14px 20px;background:#f8fafc;border-radius:8px;text-align:center;border:1px solid #e2e8f0;">
+          <p style="margin:0 0 6px;font-size:13px;color:#374151;font-weight:600;">이 메일이 유용했다면 친구에게 공유해보세요 📨</p>
+          <a href="https://ahdoyoon.site" style="font-size:13px;color:#2563eb;font-weight:600;text-decoration:none;">https://ahdoyoon.site</a>
         </div>
         <p style="margin:16px 0 0;font-size:12px;color:#6b7280;text-align:center;">
           메일 수신 설정은 MarketPulse 내 계정에서 변경할 수 있습니다.
