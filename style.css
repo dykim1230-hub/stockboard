@@ -785,6 +785,8 @@ body {
 
 .market-econ-roll {
     display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
     align-items: center;
     gap: 0.5rem;
     padding: 0.6rem 1.5rem;
@@ -795,10 +797,12 @@ body {
     font-size: 1rem;
     color: var(--accent-color);
     flex-shrink: 0;
+    line-height: 1;
 }
 
 .market-econ-roll-window {
     flex: 1;
+    min-width: 0;
     height: 1.3rem;
     overflow: hidden;
     position: relative;
@@ -806,10 +810,13 @@ body {
 
 .market-econ-roll-item {
     display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
     align-items: center;
     gap: 0.5rem;
     height: 1.3rem;
     font-size: 0.78rem;
+    font-family: var(--font-main);
     white-space: nowrap;
     animation: econRollIn 0.4s ease-out;
 }
@@ -823,12 +830,14 @@ body {
     color: var(--text-muted);
     font-weight: 600;
     flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .market-econ-name {
     color: var(--text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Landing Page */
