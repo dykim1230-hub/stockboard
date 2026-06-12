@@ -857,9 +857,13 @@ def _build_digest_html(user_email: str, summaries: list, sent_at: datetime, uid:
             📈 MarketPulse 열기
           </a>
         </div>
-        <div style="margin-top:20px;padding:14px 20px;background:#f8fafc;border-radius:8px;text-align:center;border:1px solid #e2e8f0;">
-          <p style="margin:0 0 6px;font-size:13px;color:#374151;font-weight:600;">이 메일이 유용했다면 친구에게 공유해보세요 📨</p>
-          <a href="https://ahdoyoon.site" style="font-size:13px;color:#2563eb;font-weight:600;text-decoration:none;">https://ahdoyoon.site</a>
+        <div style="margin-top:20px;padding:20px;background:#f8fafc;border-radius:8px;text-align:center;border:1px solid #e2e8f0;">
+          <p style="margin:0 0 12px;font-size:13px;color:#374151;font-weight:600;">이 뉴스레터가 도움이 됐다면 친구에게 추천해보세요!</p>
+          <a href="https://ahdoyoon.site/invite?ref={urllib.parse.quote(uid) if uid else ''}"
+             style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:6px;font-size:14px;font-weight:600;">
+            📨 친구에게 MarketPulse 추천하기
+          </a>
+          <p style="margin:10px 0 0;font-size:11px;color:#9ca3af;">버튼을 클릭하면 추천 링크가 복사됩니다. 친구에게 공유해보세요!</p>
         </div>
         <p style="margin:16px 0 0;font-size:12px;color:#6b7280;text-align:center;">
           메일 수신 설정은 MarketPulse 내 계정에서 변경할 수 있습니다.
