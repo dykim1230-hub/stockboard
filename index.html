@@ -536,8 +536,14 @@ const AuthModal = ({ isOpen, onClose }) => {
             }
             onClose();
         } catch (err) {
-            if (err.code !== 'auth/popup-closed-by-user') {
-                setError('Google 로그인에 실패했습니다. 다시 시도해주세요.');
+            if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+                // 사용자가 직접 닫은 경우 무시
+            } else if (err.code === 'auth/unauthorized-domain') {
+                setError('이 도메인은 Google 로그인이 허용되지 않았습니다. 관리자에게 문의하세요.');
+            } else if (err.code === 'auth/popup-blocked') {
+                setError('팝업이 차단되었습니다. 브라우저 팝업 허용 후 다시 시도해주세요.');
+            } else {
+                setError(`Google 로그인 실패: ${err.code || err.message}`);
             }
         } finally {
             setLoading(false);
