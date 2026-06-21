@@ -58,7 +58,8 @@
 | 가입 후 온보딩 플로우 | 완료 (2026-06-12) — OnboardingFlow 컴포넌트 (STEP1 종목/STEP2 시간/STEP3 완료), Firestore 저장, referredBy 기록 |
 | 경제지표 캘린더 | 구현됨 (2026-06-08) + 버그수정 (2026-06-11) — `/api/cron/update-calendar`, `/api/economic-calendar`, FOMC/BOK 파싱 버그 수정 후 배포·cron-job.org 등록·실행 검증 완료(FOMC 2건, BOK_RATE 1건 정상 수집). BLS(미국 CPI/PPI/Employment)는 www.bls.gov Akamai 차단(403)으로 수집 함수 호출에서 제외, 보류 |
 | 시장현황 내 경제일정 | 완료 (2026-06-11) — 별도 패널이던 "이번 주 경제 일정"을 시장현황(MarketOverview) 하단에 통합, 일정 여러 개일 때 3초 간격 위로 슬라이드 롤링 표시 (`market-econ-roll`) |
-| 가격 차트 캔들스틱 전환 | **롤백 (2026-06-21)** — `chartjs-chart-financial`이 Chart.js 4.x UMD와 비호환(BarController undefined 크래시). 라인 차트(종가)로 복구. MA/볼린저/거래량 오버레이 유지 |
+| 가격 차트 캔들스틱 전환 | 완료 (2026-06-21) — `chartjs-chart-financial` 제거, 커스텀 `afterDatasetsDraw` 플러그인으로 캔들 직접 드로잉. 상승/하락 색상, OHLC 툴팁, y축 고/저가 범위 |
+| Babel 버전 고정 | 완료 (2026-06-21) — `@babel/standalone@7.23.10` 고정. 최신 버전이 ES module 출력으로 바꿔 black screen 발생 |
 
 ## 다음 작업 후보
 
@@ -115,7 +116,7 @@ bash scripts/post-deploy.sh
 | 날짜 | 2026-06-21 |
 | 작성자 | Claude Sonnet 4.6 |
 | 작업 환경 | Windows 11. 백엔드는 push → Render 자동배포. 프론트는 firebase deploy --only hosting. |
-| 내용 | 차트가 표시되지 않는 버그 수정 — chartjs-chart-financial UMD가 Chart.js 4.x와 비호환(BarController undefined). 캔들스틱 제거, 종가 라인 차트로 교체. |
+| 내용 | ① Babel 버전 고정(@babel/standalone@7.23.10) — 최신 버전이 ES module 출력으로 바꿔 black screen 유발. ② 캔들스틱 차트 복원 — chartjs-chart-financial 대신 커스텀 afterDatasetsDraw 플러그인으로 OHLC 직접 드로잉. 상승/하락 색상·OHLC 툴팁·y축 고저가 범위 적용. |
 | 다음 우선순위 | 추천 랜딩 페이지(/invite) 전용 UI, BLS 경제지표 재추가(FRED API), PWA 전환 |
 | Gemini 모델 현황 | 뉴스레터: 2.5-flash-lite(기본) → 2.5-flash(폴백). Grounding: google_search tool |
-| 주의 | gemini-1.5-flash, gemini-2.0-flash 서비스 종료 확인(2026년 상반기) — 폴백 목록에서 완전 제거. EconomicCalendar는 현재 FOMC(2026-06-17, 07-29), BOK_RATE(2026-07-16) 데이터로 정상 표시됨. cron-job.org 잡: 매주 월요일 00:00 UTC POST /api/cron/update-calendar. 온보딩 완료 시 Firestore에 favorites/emailDigest.hour/referredBy 저장. 추천 링크: ahdoyoon.site/invite?ref={uid} (sessionStorage 방식). chartjs-chart-financial은 Chart.js 4.x UMD 환경에서 사용 불가 — 재도입 시 Vite 빌드 환경으로 전환 필요. |
+| 주의 | ① @babel/standalone은 반드시 버전 고정 유지(7.23.10). 버전 올릴 경우 `data-presets="react"` 속성 필요 여부 확인. ② chartjs-chart-financial은 Chart.js 4.x UMD 환경 사용 불가 — 커스텀 플러그인 방식 유지. ③ gemini-1.5-flash, gemini-2.0-flash 서비스 종료 — 폴백 목록 제거 유지. ④ EconomicCalendar: FOMC(2026-06-17, 07-29), BOK_RATE(2026-07-16). cron-job.org 매주 월요일 00:00 UTC. ⑤ 온보딩 플로우: 현재 코드에서 제거됨(백업 복구 과정에서 누락). 필요 시 b22b1da 커밋 참고하여 재추가. |

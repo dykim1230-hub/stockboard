@@ -11,6 +11,33 @@
 
 ## 로그
 
+### 2026-06-21 - 차트 black screen 수정 + 캔들스틱 복원
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Sonnet 4.6 |
+| 변경 파일 | `index.html` |
+| 커밋 | `3fc857f` (Babel 고정), `5a75ae4` (캔들스틱 복원) |
+
+**1. Black screen 원인 분석 및 수정**
+- 증상: 사이트 접속 시 화면 전체가 검은색으로만 보임
+- 원인: `@babel/standalone` 버전 미고정 → 최신 버전이 JSX 변환 출력을 ES module 형식으로 변경 → `import` 구문이 일반 `<script>` 컨텍스트에서 허용되지 않아 Babel이 appendChild 실패
+- 에러: `VM66:6 Uncaught SyntaxError: Failed to execute 'appendChild' on 'Node': Cannot use import statement outside a module`
+- 수정: `@babel/standalone@7.23.10`으로 버전 고정
+- 교훈: 이전 black screen(5311dbf 커밋)도 이 Babel 버전 문제였을 가능성 높음. 커스텀 플러그인 코드 자체는 문제 없었음
+
+**2. 캔들스틱 차트 복원**
+- `chartjs-chart-financial`은 Chart.js 4.x UMD와 비호환(플러그인 로드 시 `window.Chart.BarController` undefined 크래시) → 영구 제거
+- 대신 Chart.js 내장 canvas API로 `afterDatasetsDraw` 커스텀 플러그인 구현
+- 데이터셋: `type: 'line'`에 `_ohlc` 필드로 OHLC 데이터 전달, 투명 선으로 x/y 스케일만 잡고 실제 캔들은 플러그인이 직접 그림
+- 상승(종가≥시가): 초록 `#10b981`, 하락: 빨강 `#ef4444`
+- y축: 고가/저가 기준으로 `min * 0.998`, `max * 1.002` 범위 설정
+- 툴팁: dataset[0] 호버 시 시가/고가/저가/종가 4줄 표시
+
+**3. 백업 복구 과정에서 OnboardingFlow 누락 발견**
+- `index_backup_20260612.html`이 당일 세션 초기 백업 → OnboardingFlow, 추천 랜딩 개선 등 2026-06-12 작업 내용 미포함
+- 현재 배포 코드에서 OnboardingFlow 컴포넌트 없음. 필요 시 `b22b1da` 커밋에서 복구 가능
+
 ### 2026-06-12 - ahdoyoon.site OAuth 설정 완료 + UX 개선 다수 + 온보딩 플로우 추가
 
 | 항목 | 내용 |
