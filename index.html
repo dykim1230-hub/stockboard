@@ -24,9 +24,28 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <!-- Chart.js 4.x exports helpers individually; chartjs-chart-financial expects Chart.helpers namespace -->
+    <script>
+    (function(){
+        if(typeof Chart === 'undefined') return;
+        var ns = window.Chart;
+        if(!ns.helpers) {
+            ns.helpers = {
+                isNullOrUndef: ns.isNullOrUndef || function(v){ return v === null || v === undefined; },
+                valueOrDefault: ns.valueOrDefault || function(v,d){ return typeof v === 'undefined' ? d : v; },
+                clipArea: ns.clipArea || function(ctx, area){
+                    ctx.save(); ctx.beginPath();
+                    ctx.rect(area.left, area.top, area.right - area.left, area.bottom - area.top);
+                    ctx.clip();
+                },
+                unclipArea: ns.unclipArea || function(ctx){ ctx.restore(); }
+            };
+        }
+    })();
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.2.1/dist/chartjs-chart-financial.js"></script>
 
     <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
