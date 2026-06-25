@@ -117,23 +117,38 @@ MARKET_INDICES = [
 ]
 
 def _fetch_index(idx):
-    fi = yf.Ticker(idx["symbol"]).fast_info
-    price = fi.last_price
-    prev = fi.previous_close
-    if price is None:
-        return None
-    price = float(price)
-    prev = float(prev or price)
-    change = price - prev
-    change_pct = (change / prev * 100) if prev else 0.0
-    return {
-        "symbol": idx["symbol"],
-        "name": idx["name"],
-        "price": price,
-        "change": change,
-        "change_pct": change_pct,
-        "currency": idx["currency"],
-    }
+    cache_key = f"index:{idx['symbol']}"
+    cached, hit = _get_cache(cache_key)
+    if hit:
+        return cached
+
+    for attempt in range(3):
+        try:
+            fi = yf.Ticker(idx["symbol"]).fast_info
+            price = fi.last_price
+            prev = fi.previous_close
+            if price is None:
+                return None
+            price = float(price)
+            prev = float(prev or price)
+            change = price - prev
+            change_pct = (change / prev * 100) if prev else 0.0
+            result = {
+                "symbol": idx["symbol"],
+                "name": idx["name"],
+                "price": price,
+                "change": change,
+                "change_pct": change_pct,
+                "currency": idx["currency"],
+            }
+            _set_cache(cache_key, result, ttl=300)
+            return result
+        except Exception as e:
+            if "Too Many Requests" in str(e) and attempt < 2:
+                time.sleep(3 * (attempt + 1))
+                continue
+            raise
+    return None
 
 @app.get("/api/market")
 def get_market():
@@ -143,7 +158,7 @@ def get_market():
         return cached
 
     result = []
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:
         futures = {executor.submit(_fetch_index, idx): idx for idx in MARKET_INDICES}
         for future in as_completed(futures):
             try:
