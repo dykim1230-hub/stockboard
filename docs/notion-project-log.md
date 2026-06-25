@@ -26,6 +26,7 @@
 | 관리자 패널 | 완료 | 회원 목록 조회, 계정 삭제, 비밀번호 초기화 링크 생성 |
 | 회원별 메일 요약 | 완료 | Resend + Render Cron Job, Gemini AI 투자의견·뉴스 요약 포함 |
 | 문의 폼 | 완료 | 푸터 ContactModal, POST /api/contact, IP rate limit |
+| 초대 랜딩 페이지 | 완료 | `/invite?ref=...` 접속 시 InviteLanding 렌더링, ref → sessionStorage 저장 |
 
 ## 3. 기술 스택
 
@@ -209,6 +210,7 @@ Value: v=DMARC1; p=none;
 
 | 날짜 | 커밋 | 내용 |
 | --- | --- | --- |
+| 2026-06-16 | — | 초대 랜딩 페이지(InviteLanding) 추가 — `/invite?ref=...` 전용, ref sessionStorage 저장, 샘플 뉴스레터 카드 3개 |
 | 2026-06-11 | `3ea2c70` | 시장현황에 경제일정 통합(3초 슬라이드 롤링), 가격 차트 라인→캔들스틱 전환(`/api/chart` OHLC 추가) |
 | 2026-06-11 | `4731b59`, `4efdacc` | 경제지표 캘린더 FOMC/BOK 파싱 버그 수정, BLS 호출 제외, cron-job.org 운영 개시 |
 | 2026-06-08 | `e180f66` | 로그인 후 공백 화면 버그 수정 — ChartSection stale analysis JSX(ReferenceError) 제거, EcCalBoundary 추가, EconomicCalendar 재활성화 |

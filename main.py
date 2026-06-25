@@ -651,8 +651,8 @@ def _gemini_stock_analysis(stock_summaries: list, model: str = "gemini-2.5-flash
     except Exception:
         grounding_config = None
 
-    # 모델 순서: 기본(2회) → gemini-2.5-flash 폴백
-    fallback_models = ["gemini-2.5-flash"]
+    # 모델 순서: 기본(2회) → gemini-2.5-flash → gemini-2.0-flash 폴백
+    fallback_models = ["gemini-2.5-flash", "gemini-2.0-flash"]
     model_sequence = [model, model] + fallback_models
     max_attempts = len(model_sequence)
     for attempt in range(max_attempts):
