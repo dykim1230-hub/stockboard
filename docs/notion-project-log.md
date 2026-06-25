@@ -210,6 +210,9 @@ Value: v=DMARC1; p=none;
 
 | 날짜 | 커밋 | 내용 |
 | --- | --- | --- |
+| 2026-06-25 | `bddb336` | Gemini 503 fallback — `gemini-2.0-flash` 4번째 시도 모델 추가 (2.5-flash-lite × 2 → 2.5-flash → 2.0-flash) |
+| 2026-06-25 | `419c5d9` | yfinance rate limit 수정 — 지수별 개별 캐시 + 재시도 3회(3s/6s) + max_workers 5→2 |
+| 2026-06-21 | `3fc857f`, `5a75ae4` | Babel 버전 고정(@7.23.10), 캔들스틱 차트 복원(커스텀 afterDatasetsDraw 플러그인) |
 | 2026-06-16 | — | 초대 랜딩 페이지(InviteLanding) 추가 — `/invite?ref=...` 전용, ref sessionStorage 저장, 샘플 뉴스레터 카드 3개 |
 | 2026-06-11 | `3ea2c70` | 시장현황에 경제일정 통합(3초 슬라이드 롤링), 가격 차트 라인→캔들스틱 전환(`/api/chart` OHLC 추가) |
 | 2026-06-11 | `4731b59`, `4efdacc` | 경제지표 캘린더 FOMC/BOK 파싱 버그 수정, BLS 호출 제외, cron-job.org 운영 개시 |

@@ -11,6 +11,33 @@
 
 ## 로그
 
+### 2026-06-25 - Gemini 503 fallback 추가 + yfinance rate limit 수정
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Sonnet 4.6 |
+| 변경 파일 | `main.py` |
+| 커밋 | `bddb336` (Gemini fallback), `419c5d9` (yfinance rate limit) |
+
+**1. Gemini 503 UNAVAILABLE 원인 분석**
+- 증상: 뉴스레터 메일에 AI 투자의견·뉴스 개별 요약·투자자 반응이 모두 없고 뉴스 링크만 표시됨
+- 원인: `_gemini_stock_analysis()`에서 `gemini-2.5-flash-lite`와 `gemini-2.5-flash`가 동일 인프라를 사용해 동시에 503(과부하)이 발생 → 3회 재시도 모두 실패 → 빈 배열 반환 → 메일은 발송되나 AI 콘텐츠 없음
+- 수정: `fallback_models`에 `gemini-2.0-flash` 추가 (다른 세대 모델로 503 회피)
+- 폴백 순서: `gemini-2.5-flash-lite` × 2 → `gemini-2.5-flash` → `gemini-2.0-flash` (총 4회 시도)
+
+**2. yfinance rate limit 수정 (`_fetch_index`)**
+- 증상: 배포 직후 `Market index error ^IXIC: Too Many Requests. Rate limited.` 반복
+- 원인: 배포 시 인메모리 캐시 초기화 → 5개 지수를 `ThreadPoolExecutor(max_workers=5)`로 동시 요청 → Yahoo Finance rate limit
+- 수정 3가지:
+  - 지수별 개별 캐시(`index:{symbol}`, TTL 300s) 추가 → 일부만 만료 시 해당 지수만 재요청
+  - rate limit 시 3초·6초 간격으로 최대 3회 재시도
+  - `max_workers` 5 → 2로 축소해 동시 요청 수 감소
+
+**3. 이메일 강제발송 미작동 (미해결)**
+- 증상: 관리자 패널 강제 발송 시도 후 메일 미수신
+- 현황: Render 로그에서 `Market index error ^IXIC: Too Many Requests` 확인. 이메일 발송 자체 에러 로그는 미확인
+- 추가 확인 필요: Render 로그에서 `Resend error` / `lastError` 키워드 검색, Firestore `users/{uid}.emailDigest.lastError` 필드 확인
+
 ### 2026-06-21 - 차트 black screen 수정 + 캔들스틱 복원
 
 | 항목 | 내용 |

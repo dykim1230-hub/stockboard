@@ -113,10 +113,10 @@ bash scripts/post-deploy.sh
 
 | 항목 | 내용 |
 | --- | --- |
-| 날짜 | 2026-06-21 |
+| 날짜 | 2026-06-25 |
 | 작성자 | Claude Sonnet 4.6 |
-| 작업 환경 | Windows 11. 백엔드는 push → Render 자동배포. 프론트는 firebase deploy --only hosting. |
-| 내용 | ① Babel 버전 고정(@babel/standalone@7.23.10) — 최신 버전이 ES module 출력으로 바꿔 black screen 유발. ② 캔들스틱 차트 복원 — chartjs-chart-financial 대신 커스텀 afterDatasetsDraw 플러그인으로 OHLC 직접 드로잉. 상승/하락 색상·OHLC 툴팁·y축 고저가 범위 적용. |
-| 다음 우선순위 | 추천 랜딩 페이지(/invite) 전용 UI, BLS 경제지표 재추가(FRED API), PWA 전환 |
-| Gemini 모델 현황 | 뉴스레터: 2.5-flash-lite(기본) → 2.5-flash(폴백). Grounding: google_search tool |
-| 주의 | ① @babel/standalone은 반드시 버전 고정 유지(7.23.10). 버전 올릴 경우 `data-presets="react"` 속성 필요 여부 확인. ② chartjs-chart-financial은 Chart.js 4.x UMD 환경 사용 불가 — 커스텀 플러그인 방식 유지. ③ gemini-1.5-flash, gemini-2.0-flash 서비스 종료 — 폴백 목록 제거 유지. ④ EconomicCalendar: FOMC(2026-06-17, 07-29), BOK_RATE(2026-07-16). cron-job.org 매주 월요일 00:00 UTC. ⑤ 온보딩 플로우: 현재 코드에서 제거됨(백업 복구 과정에서 누락). 필요 시 b22b1da 커밋 참고하여 재추가. |
+| 작업 환경 | macOS. 백엔드는 push → Render 자동배포. 프론트는 firebase deploy --only hosting. |
+| 내용 | ① Gemini 503 fallback — `gemini-2.0-flash`를 4번째 시도 모델로 추가(2.5-flash-lite × 2 → 2.5-flash → 2.0-flash). ② yfinance rate limit — 지수별 개별 캐시 + 재시도 3회 + max_workers 5→2. |
+| 미해결 | 관리자 강제발송 시 메일 미수신 — Render 로그에서 `Resend error` / Firestore `emailDigest.lastError` 추가 확인 필요 |
+| Gemini 모델 현황 | 뉴스레터: 2.5-flash-lite(기본) × 2 → 2.5-flash → 2.0-flash (총 4회). Grounding: google_search tool |
+| 주의 | ① @babel/standalone은 반드시 버전 고정 유지(7.23.10). ② chartjs-chart-financial은 Chart.js 4.x UMD 환경 사용 불가 — 커스텀 플러그인 방식 유지. ③ EconomicCalendar: FOMC(2026-07-29), BOK_RATE(2026-07-16). cron-job.org 매주 월요일 00:00 UTC. ④ 온보딩 플로우(OnboardingFlow): 현재 배포 코드에서 제거됨. `stash@{0}` 또는 `b22b1da` 커밋 참고. ⑤ index.html 머지 충돌 미해결 — `stash@{0}`에 OnboardingFlow 등 로컬 작업본 보존 중. |
