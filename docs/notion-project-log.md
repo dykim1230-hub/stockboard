@@ -210,6 +210,7 @@ Value: v=DMARC1; p=none;
 
 | 날짜 | 커밋 | 내용 |
 | --- | --- | --- |
+| 2026-06-30 | (hosting 배포) | 비회원 랜딩 재구성 — 히어로 문구 교체(h1 MarketPulse 유지+보조문구), 샘플 뉴스레터 실물 카드·신뢰 신호 바 신규, 기능 카드 4개 문구 교체, 하단 CTA 신규. `index.html`/`style.css`. firebase hosting 배포 완료 |
 | 2026-06-25 | `bddb336` | Gemini 503 fallback — `gemini-2.0-flash` 4번째 시도 모델 추가 (2.5-flash-lite × 2 → 2.5-flash → 2.0-flash) |
 | 2026-06-25 | `419c5d9` | yfinance rate limit 수정 — 지수별 개별 캐시 + 재시도 3회(3s/6s) + max_workers 5→2 |
 | 2026-06-21 | `3fc857f`, `5a75ae4` | Babel 버전 고정(@7.23.10), 캔들스틱 차트 복원(커스텀 afterDatasetsDraw 플러그인) |

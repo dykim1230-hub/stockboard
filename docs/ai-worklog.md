@@ -11,6 +11,31 @@
 
 ## 로그
 
+### 2026-06-30 - 비회원 메인 화면(랜딩) 재구성
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Opus 4.8 |
+| 변경 파일 | `index.html`, `style.css` |
+| 백업 | `index_backup_20260630.html` |
+| 배포 | ✅ 완료 — `firebase deploy --only hosting` (portfolio-4ffcf, 2026-06-30). 프론트 전용 변경이라 Render 백엔드 재배포 불필요 |
+
+**목적**: 비회원 랜딩이 "기능 설명"에 머물러 핵심 차별점(AI 뉴스레터)을 실물로 보여주지 못함. 설명을 줄이고 증거(샘플 뉴스레터)를 앞세워 가입 전환율을 높임.
+
+**변경 내용**
+- **히어로 문구 교체**: 배지 `AI 기반 주식 대시보드` → `매일 아침 AI 주식 브리핑`. h1 `MarketPulse`는 **유지**(사용자 요청)하고 그 아래 보조문구(`.landing-tagline`) `"내가 고른 종목만, AI가 매일 아침 정리해드립니다"` 신규 추가. 서브텍스트 → `"시세·뉴스·투자 의견을 직접 찾아다니지 마세요. 이메일 한 통이면 끝."` CTA 버튼 텍스트는 유지.
+- **샘플 뉴스레터 섹션 신규 추가**(히어로 다음, 기능 카드 위): `.landing-sample`. 삼성전자(005930.KS) 75,400원 ▲1.2% + AI 투자의견 예시 + 관련 뉴스 2건 하드코딩 카드. 우측 상단 `샘플` 배지(`#F59E0B`, 지시상 명시된 유일한 하드코딩 색상). 나머지 색상은 기존 `--bg-*`/`--text-*`/`--success-color` 변수 재사용.
+- **신뢰 신호 바 신규 추가**: `.landing-trust-bar` — `"Gemini 2.5 기반 AI 분석 · 매일 정해진 시간 자동 발송"`. 가짜 회원수/후기 없음.
+- **기능 카드 4개 문구 교체**(레이아웃·아이콘 유지): 짧은 제목 + 교체 문구를 desc로. ① 아침 종목 브리핑 ② 기술 지표 차트 ③ 관심 종목 뉴스 ④ 원하는 시간·종목.
+- **하단 CTA 신규 추가**: `.landing-bottom-cta` — `"지금 가입하면 내일 아침부터 바로 받아보실 수 있어요"` + 히어로와 동일한 `무료로 시작하기` 버튼(`setIsAuthOpen(true)`).
+
+**결정/주의**
+- 헤드라인 h1은 `MarketPulse` 브랜드명 유지 결정(사용자) → 지시상의 새 헤드라인 문구는 h1 아래 보조문구로 배치.
+- `MarketOverview`(시장현황바), 로그인 후 대시보드, Auth/Firebase, main.py, firebase.json은 건드리지 않음.
+- 외부 라이브러리·import/export 없이 기존 React UMD + Babel 환경 유지.
+
+**배포**: 2026-06-30 `firebase deploy --only hosting` 실행 완료 (https://portfolio-4ffcf.web.app, https://ahdoyoon.site).
+
 ### 2026-06-25 - Gemini 503 fallback 추가 + yfinance rate limit 수정
 
 | 항목 | 내용 |
