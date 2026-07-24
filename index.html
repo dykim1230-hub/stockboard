@@ -768,7 +768,7 @@ const Week52Bar = ({ price, high, low, currency }) => {
     );
 };
 
-const FavoriteCard = ({ favorite, isActive, onClick, onToggle, quote, quotesLoading }) => {
+const FavoriteCard = ({ favorite, isActive, onClick, onToggle, quote, quotesLoading, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd }) => {
     const loading = quotesLoading;
     const nameWrapRef = useRef(null);
     const [scrollDelta, setScrollDelta] = useState(0);
@@ -798,7 +798,16 @@ const FavoriteCard = ({ favorite, isActive, onClick, onToggle, quote, quotesLoad
     const isNegative = rawChange < 0;
 
     return (
-        <div className={`glass-panel favorite-card ${isActive ? 'active' : ''}`} onClick={() => onClick(favorite)} onTouchStart={handleCardTouchStart}>
+        <div
+            className={`glass-panel favorite-card ${isActive ? 'active' : ''}${isDragging ? ' dragging' : ''}${isDragOver ? ' drag-over' : ''}`}
+            onClick={() => onClick(favorite)}
+            onTouchStart={handleCardTouchStart}
+            draggable
+            onDragStart={onDragStart}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
+            onDragEnd={onDragEnd}
+        >
             <div className="card-header">
                 <div className="card-symbol" onClick={e => e.stopPropagation()}>
                     <input
@@ -1625,6 +1634,37 @@ const App = () => {
         });
     };
 
+    const [dragIndex, setDragIndex] = useState(null);
+    const [dragOverIndex, setDragOverIndex] = useState(null);
+
+    const handleCardDragStart = (index) => setDragIndex(index);
+
+    const handleCardDragOver = (e, index) => {
+        e.preventDefault();
+        if (index !== dragOverIndex) setDragOverIndex(index);
+    };
+
+    const handleCardDrop = (e, index) => {
+        e.preventDefault();
+        setDragIndex(currentDragIndex => {
+            if (currentDragIndex !== null && currentDragIndex !== index) {
+                setFavorites(prev => {
+                    const next = [...prev];
+                    const [moved] = next.splice(currentDragIndex, 1);
+                    next.splice(index, 0, moved);
+                    return next;
+                });
+            }
+            return null;
+        });
+        setDragOverIndex(null);
+    };
+
+    const handleCardDragEnd = () => {
+        setDragIndex(null);
+        setDragOverIndex(null);
+    };
+
     const handleLogout = () => auth.signOut();
 
     if (authLoading) {
@@ -1771,6 +1811,12 @@ const App = () => {
                                         onToggle={toggleFavorite}
                                         quote={quotes[fav.symbol] || null}
                                         quotesLoading={quotesLoading}
+                                        isDragging={dragIndex === i}
+                                        isDragOver={dragOverIndex === i && dragIndex !== i}
+                                        onDragStart={() => handleCardDragStart(i)}
+                                        onDragOver={(e) => handleCardDragOver(e, i)}
+                                        onDrop={(e) => handleCardDrop(e, i)}
+                                        onDragEnd={handleCardDragEnd}
                                     />
                                 ) : (
                                     <div key={`empty-${i}`} className="glass-panel favorite-card-empty" onClick={() => setIsSearchOpen(true)}>

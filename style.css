@@ -147,6 +147,15 @@ body {
     box-shadow: 0 0 0 1px var(--accent-color), 0 8px 24px rgba(59, 130, 246, 0.2);
 }
 
+.favorite-card.dragging {
+    opacity: 0.4;
+}
+
+.favorite-card.drag-over {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px var(--accent-color);
+}
+
 .card-header {
     display: flex;
     justify-content: space-between;
