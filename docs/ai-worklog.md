@@ -11,6 +11,25 @@
 
 ## 로그
 
+### 2026-07-24 - 즐겨찾기 카드 드래그 정렬
+
+| 항목 | 내용 |
+| --- | --- |
+| 작업자 | Claude Sonnet 5 |
+| 변경 파일 | `index.html`, `style.css` |
+| 배포 | ✅ 완료 — `firebase deploy --only hosting` (portfolio-4ffcf, 2026-07-24). 프론트 전용 변경, Render 백엔드 재배포 불필요 |
+| 배포 후 점검 | `scripts/post-deploy.sh` 7/7 통과 (최초 1회는 `/api/search` Render cold start로 타임아웃 → 재시도 시 정상, 이번 변경과 무관) |
+
+**목적**: 즐겨찾기 카드 순서를 마우스로 드래그해 바꾸고, 메일 다이제스트 발송 순서도 같이 바뀌게 함.
+
+**변경 내용**
+- `FavoriteCard`에 HTML5 네이티브 드래그 앤 드롭(`draggable`, `onDragStart/onDragOver/onDrop/onDragEnd`) 추가. 드래그 중/드롭 대상 카드에 `.dragging`/`.drag-over` 클래스로 시각 피드백.
+- `App`에 `dragIndex`/`dragOverIndex` state와 `handleCardDragStart/DragOver/Drop/DragEnd` 핸들러 추가. 드롭 시 `favorites` 배열에서 `splice`로 항목을 옮겨 재정렬.
+- 백엔드는 변경하지 않음 — `main.py`의 다이제스트 발송 로직(`/api/cron/digest`)이 이미 Firestore `favorites` 배열을 순서대로 순회하므로, 프론트에서 배열 순서만 바꾸면 메일 순서도 자동으로 반영됨. 기존 `useEffect`가 `favorites` 변경 시 Firestore에 자동 저장.
+- 별도 라이브러리(react-beautiful-dnd, dnd-kit 등) 추가하지 않고 네이티브 API로 구현.
+
+**남은 일**: 터치(모바일) 드래그는 미지원 — 네이티브 HTML5 DnD는 마우스 기반. 모바일 순서 변경이 필요해지면 별도 터치 핸들러 구현 필요.
+
 ### 2026-06-30 - 비회원 메인 화면(랜딩) 재구성
 
 | 항목 | 내용 |

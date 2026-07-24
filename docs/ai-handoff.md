@@ -61,6 +61,7 @@
 | 가격 차트 캔들스틱 전환 | 완료 (2026-06-21) — `chartjs-chart-financial` 제거, 커스텀 `afterDatasetsDraw` 플러그인으로 캔들 직접 드로잉. 상승/하락 색상, OHLC 툴팁, y축 고/저가 범위 |
 | Babel 버전 고정 | 완료 (2026-06-21) — `@babel/standalone@7.23.10` 고정. 최신 버전이 ES module 출력으로 바꿔 black screen 발생 |
 | 비회원 랜딩 재구성 | 완료 (2026-06-30) — 히어로 문구 교체(h1 `MarketPulse` 유지+보조문구 추가), 샘플 뉴스레터 실물 카드 신규, 신뢰 신호 바, 기능 카드 4개 문구 교체, 하단 CTA 신규. `index.html`/`style.css` 수정. **firebase hosting 배포 완료** |
+| 즐겨찾기 카드 드래그 정렬 | 완료 (2026-07-24) — HTML5 네이티브 드래그 앤 드롭으로 카드 순서 변경, `favorites` 배열 재정렬 → Firestore 자동 저장 → 메일 다이제스트 발송 순서도 동일하게 반영(백엔드 무변경). 모바일 터치 드래그는 미지원. **firebase hosting 배포 완료** |
 
 ## 다음 작업 후보
 
@@ -114,10 +115,10 @@ bash scripts/post-deploy.sh
 
 | 항목 | 내용 |
 | --- | --- |
-| 날짜 | 2026-06-30 |
-| 작성자 | Claude Opus 4.8 |
+| 날짜 | 2026-07-24 |
+| 작성자 | Claude Sonnet 5 |
 | 작업 환경 | macOS. 백엔드는 push → Render 자동배포. 프론트는 firebase deploy --only hosting. |
-| 내용 | 비회원 랜딩 재구성 — `index.html`/`style.css`. 히어로 문구 교체(h1 MarketPulse 유지+보조문구), 샘플 뉴스레터 실물 카드 신규, 신뢰 신호 바, 기능 카드 4개 문구 교체, 하단 CTA 신규. 백업 `index_backup_20260630.html`. **`firebase deploy --only hosting` 완료.** |
+| 내용 | 즐겨찾기 카드 드래그 정렬 — `index.html`/`style.css`. `FavoriteCard`에 HTML5 네이티브 드래그 앤 드롭 추가, `App`에 재정렬 핸들러 추가. 백엔드 무변경(기존 로직이 `favorites` 배열 순서를 그대로 사용). **`firebase deploy --only hosting` 완료.** 배포 후 `scripts/post-deploy.sh` 7/7 통과. |
 | 미해결 | 관리자 강제발송 시 메일 미수신 — Render 로그 `Resend error` / Firestore `emailDigest.lastError` 추가 확인 필요 |
 | Gemini 모델 현황 | 뉴스레터: 2.5-flash-lite(기본) × 2 → 2.5-flash → 2.0-flash (총 4회). Grounding: google_search tool |
-| 주의 | ① @babel/standalone은 반드시 버전 고정 유지(7.23.10). ② chartjs-chart-financial은 Chart.js 4.x UMD 환경 사용 불가 — 커스텀 플러그인 방식 유지. ③ EconomicCalendar: FOMC(2026-07-29), BOK_RATE(2026-07-16). cron-job.org 매주 월요일 00:00 UTC. ④ 온보딩 플로우(OnboardingFlow): 현재 배포 코드에서 제거됨. `stash@{0}` 또는 `b22b1da` 커밋 참고. ⑤ index.html 머지 충돌 미해결 — `stash@{0}`에 OnboardingFlow 등 로컬 작업본 보존 중. |
+| 주의 | ① @babel/standalone은 반드시 버전 고정 유지(7.23.10). ② chartjs-chart-financial은 Chart.js 4.x UMD 환경 사용 불가 — 커스텀 플러그인 방식 유지. ③ EconomicCalendar: FOMC(2026-07-29), BOK_RATE(2026-07-16). cron-job.org 매주 월요일 00:00 UTC. ④ 온보딩 플로우(OnboardingFlow): 현재 배포 코드에서 제거됨. `stash@{0}` 또는 `b22b1da` 커밋 참고. ⑤ index.html 머지 충돌 미해결 — `stash@{0}`에 OnboardingFlow 등 로컬 작업본 보존 중. ⑥ 즐겨찾기 카드 드래그 정렬은 마우스 전용(모바일 터치 드래그 미지원). |
